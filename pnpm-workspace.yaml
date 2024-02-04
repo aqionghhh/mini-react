@@ -1,0 +1,3 @@
+packages:
+  # 根目录下的packages目录下的直接文件就是monorepo的子项目
+  - 'packages/*'
