@@ -16,8 +16,9 @@ const ReactElement = function (type: Type, key: Key, ref: Ref, props: Props): Re
 };
 
 // <div id="333">123</div>
-export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
-  // 处理config：在config里有俩个特殊的props需要注意：一个是key，一个是ref，需要单独处理这两个值
+// 注意：jsx和createElement方法接收的参数不同，详情可自行在babel官网查看
+export const createElement = (type: ElementType, config: any, ...maybeChildren: any) => {
+  // 处理config：在createElement里有俩个特殊的props需要注意：一个是key，一个是ref，需要单独处理这两个值
   const props: Props = {};
   let key: Key = null;
   let ref: Ref = null;
@@ -33,7 +34,7 @@ export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
     }
     if (prop === 'ref') {
       if (val !== undefined) {
-        ref = '' + val;
+        ref = val;
       }
       continue;
     }
@@ -53,6 +54,37 @@ export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
   }
 
   return ReactElement(type, key, ref, props);
+};
+
+export const jsx = (type: ElementType, config: any, maybeKey: any) => {
+	const props: Props = {};
+	let key: Key = null;
+	let ref: Ref = null;
+
+	if (maybeKey !== undefined) { // 在jsx方法中，key会作为第三个参数传入
+		key = '' + maybeKey;
+	}
+
+	for (const prop in config) {
+		const val = config[prop];
+		if (prop === 'key') { // 感觉这里不需要这个if判断？？？
+			if (val !== undefined) {
+				key = '' + val;
+			}
+			continue;
+		}
+		if (prop === 'ref') {
+			if (val !== undefined) {
+				ref = val;
+			}
+			continue;
+		}
+		if ({}.hasOwnProperty.call(config, prop)) {
+			props[prop] = val;
+		}
+	}
+
+	return ReactElement(type, key, ref, props);
 };
 
 // 在这里生产环境和开发环境的jsx都是同样的实现（但是实际上的react中，jsxDEV和jsx的实现并不相同，在dev环境中会多做一些检查）
