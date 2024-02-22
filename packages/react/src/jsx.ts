@@ -1,8 +1,8 @@
 import { REACT_ELEMENT_TYPE } from 'shared/ReactSymbols';
-import { Type, Key, Props, Ref, ElementType, ReactElement } from 'shared/ReactTypes';
+import { Type, Key, Props, Ref, ElementType, ReactElementType } from 'shared/ReactTypes';
 //ReactElement(ReactElement是一个跟宿主环境无关的数据结构，所以其类型定义应该写在shared这个包中)
 
-const ReactElement = function (type: Type, key: Key, ref: Ref, props: Props): ReactElement {
+const ReactElement = function (type: Type, key: Key, ref: Ref, props: Props): ReactElementType {
 	const element = {
 		$$typeof: REACT_ELEMENT_TYPE, // 需要用一个内部变量区分当前数据结构是一个ReactElement
 		key,
