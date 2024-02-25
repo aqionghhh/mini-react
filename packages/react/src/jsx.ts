@@ -88,4 +88,29 @@ export const jsx = (type: ElementType, config: any, maybeKey: any) => {
 };
 
 // 在这里生产环境和开发环境的jsx都是同样的实现（但是实际上的react中，jsxDEV和jsx的实现并不相同，在dev环境中会多做一些检查）
-export const jsxDEV = jsx;  
+export const jsxDEV = (type: ElementType, config: any) => {
+	const props: Props = {};
+	let key: Key = null;
+	let ref: Ref = null;
+
+	for (const prop in config) {
+		const val = config[prop];
+		if (prop === 'key') { // 感觉这里不需要这个if判断？？？
+			if (val !== undefined) {
+				key = '' + val;
+			}
+			continue;
+		}
+		if (prop === 'ref') {
+			if (val !== undefined) {
+				ref = val;
+			}
+			continue;
+		}
+		if ({}.hasOwnProperty.call(config, prop)) {
+			props[prop] = val;
+		}
+	}
+
+	return ReactElement(type, key, ref, props);
+};
