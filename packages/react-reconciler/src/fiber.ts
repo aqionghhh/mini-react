@@ -2,6 +2,7 @@
 import { Props, Key, Ref } from 'shared/ReactTypes';
 import { WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
+import { Container } from 'hostConfig'; // 在tsconfig中进行了配置，这里不用写死路径
 
 export class FiberNode {
   type: any;
@@ -15,8 +16,10 @@ export class FiberNode {
   index: number;
   ref: Ref;
   memoizedProps: Props | null;
+  memoizedState: any;
   alternate: FiberNode | null;
   flags: Flags;
+  updateQueue: unknown;
 
   // pendingProps是接下来有哪些props需要改变；key对应了ReactElement的key；tag是fiberNode是怎样的一个节点
   constructor(tag: WorkTag, pendingProps: Props, key: Key) {
@@ -39,6 +42,8 @@ export class FiberNode {
     // 作为工作单元
     this.pendingProps = pendingProps; // 这个工作单元刚开始准备工作的时候，确定下来的props是什么
     this.memoizedProps = null; // 这个工作单元工作完成的时候，确定下来的props是什么
+    this.memoizedState = null; // 更新完后新的state
+    this.updateQueue = null;
 
     // 如果当前的fiberNode是current，那么alternate就指向workInProgress，反之则指向current
     this.alternate = null;  // 用于两个fiberNode之间进行切换
@@ -47,3 +52,43 @@ export class FiberNode {
   }
 
 };
+
+// 执行React.createRoot()统一创建的fiberRootNode
+export class FiberRootNode {
+  container: Container;  // 对于浏览器（DOM环境）来说，这个container就是DOM节点；对于其他宿主环境，container就对应其他节点
+  current: FiberNode; // fiberRootNode的current字段指向hostRootFiber，即传入的rootElement对应的fiber节点
+  finishedWork: FiberNode | null; // 指向更新完成后的hostRootFiber（完成整个递归流程的hostRootFiber）
+
+  constructor(container: Container, hostRootFiber: FiberNode) {
+    this.container = container;
+    this.current = hostRootFiber;
+    hostRootFiber.stateNode = this; // hostRootFiber的stateNode指向fiberRootNode
+    this.finishedWork = null;
+  }
+
+}
+
+export const createWorkInProgress = (current: FiberNode, pendingProps: Props): FiberNode => { // 因为FiberNode是双缓存机制，所以每次都获取当前节点相对应的fiberNode
+  let wip = current.alternate;
+
+  if (wip === null) { // 首屏渲染为null，即mount阶段
+    // mount
+    wip = new FiberNode(current.tag, current.pendingProps, current.key);
+    wip.type = current.type;
+    wip.stateNode = current.stateNode;
+
+    wip.alternate = current;
+    current.alternate = wip;
+  } else {
+    // update
+    wip.pendingProps = pendingProps;
+    wip.flags = NoFlags;  // 清除副作用
+  }
+  wip.type = current.type;
+  wip.updateQueue = current.updateQueue;
+  wip.child = current.child;
+  wip.memoizedProps = current.memoizedProps;
+  wip.memoizedState = current.memoizedState;
+
+  return wip;
+}

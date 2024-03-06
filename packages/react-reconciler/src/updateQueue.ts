@@ -1,7 +1,7 @@
 import { Action } from 'shared/ReactTypes';
 
 // 对于React来说，有两种触发更新的方式，比如说：
-// this.setSate({xxx: 1})
+// this.setState({xxx: 1})
 // this.setState((xx) => {xx: 2}) // 返回值作为状态的最新值
 
 export interface Update<State> {
@@ -9,6 +9,7 @@ export interface Update<State> {
 }
 
 export interface UpdateQueue<State> {
+  // 为什么UpdateQueue是这样的一个结构：因为在createWorkInProgress函数中，能让wip和current共用同一个updateQueue
   shared: {
     pending: Update<State> | null;
   }
@@ -36,9 +37,9 @@ export const createUpdateQueue = <Action>() => {
 // 往updateQueue里增加update的方法
 export const enqueueUpdate = <Action>(
   updateQueue: UpdateQueue<Action>,
-  Update: Update<Action>
+  update: Update<Action>
 ) => {
-  updateQueue.shared.pending = Update
+  updateQueue.shared.pending = update
 }
 
 // updateQueue消费update的方法

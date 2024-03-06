@@ -16,6 +16,12 @@
    "noUnusedParameters": true,
    "noImplicitReturns": false,
    "skipLibCheck": true,
-   "baseUrl": "./packages"
+   "baseUrl": "./packages",
+   "paths": {
+      // 为什么hostConfig需要进行配置，而不是直接进行引用：
+      // 如果直接进行引用的话，hostConfig就会被限制在react-reconciler中，但实际上对于不同的宿主环境都要实现对应的hostConfig；
+      // 比如说对于React-dom包来说的话，它的hostConfig就是在react-dom下面
+      "hostConfig": ["./react-reconciler/src/hostConfig.ts"]
+   }
   }
  } 
