@@ -69,7 +69,7 @@ export class FiberRootNode {
 }
 
 export const createWorkInProgress = (current: FiberNode, pendingProps: Props): FiberNode => { // 因为FiberNode是双缓存机制，所以每次都获取当前节点相对应的fiberNode
-  let wip = current.alternate;
+  let wip = current.alternate;  // wip：workInProgress缩写
 
   if (wip === null) { // 首屏渲染为null，即mount阶段
     // mount
