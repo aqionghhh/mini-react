@@ -14,3 +14,8 @@ export const appendInitialChild = (...args: any) => {
 export const createTextInstance= (...args: any) => {
   return {} as any;
 }
+
+// 模拟将宿主环境的节点插入到hostParent中
+export const appendChildToContainer = (...args: any) => {
+  return {} as any;
+}

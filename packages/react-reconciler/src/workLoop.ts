@@ -1,7 +1,9 @@
 // 完整的工作循环
 import { beginWork } from "./beginWork";
+import { commitMutationEffect } from "./commitWorks";
 import { completeWork } from "./completeWork";
 import { FiberNode, FiberRootNode, createWorkInProgress } from "./fiber";
+import { MutationMask, NoFlags } from "./fiberFlags";
 import { HostRoot } from "./workTags";
 
 // 定义一个全局变量存储fiberNode
@@ -58,6 +60,37 @@ function renderRoot(root: FiberRootNode) {
 
   // 根据wip fiberNode树，以及树中的flags，执行具体的DOM操作
   commitRoot(root);
+}
+
+function commitRoot(root: FiberRootNode) {
+  const finishedWork = root.finishedWork;
+  if (finishedWork === null) {  // 不存在commit阶段
+    return;
+  }
+
+  if (__DEV__) {
+    console.warn('commit阶段开始', finishedWork);
+  }
+
+  // 重置操作
+  root.finishedWork = null;
+
+  // 判断是否存在三个子阶段需要执行的操作
+  // 需要判断root的flags和subtreeFlags
+  const subtreeHasEffect = (finishedWork.subtreeFlags & MutationMask) !== NoFlags // 按位与
+  const rootHasEffect = (finishedWork.flags & MutationMask) !== NoFlags // 按位与
+  if (subtreeHasEffect || rootHasEffect) {
+    // beforeMutation
+    
+    // mutation（eg：Placement）
+    commitMutationEffect(finishedWork);
+    root.current = finishedWork;  // fiber树的切换（fiber树的切换时机发生在mutation执行完成和layout开始执行之前）
+
+    // layout
+    
+  } else {
+    root.current = finishedWork;  // fiber树的切换（即使没有发生更新，也要执行切换操作）
+  }
 }
 
 function workLoop() {
