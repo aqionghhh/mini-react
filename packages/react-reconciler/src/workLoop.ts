@@ -35,6 +35,7 @@ function markUpdateFromFiberToRoot(fiber: FiberNode) { // 从当前的fiber一�
 
 function renderRoot(root: FiberRootNode) {
   // 初始化
+  // 这里的root是fiberRootNode，root.current字段指向hostRootFiber
   prepareFreshStack(root);
 
   do {
@@ -48,6 +49,15 @@ function renderRoot(root: FiberRootNode) {
       workInProgress = null;
     }
   } while (true)
+  
+  // 流程完毕后会重新回到根节点，那么就可以获取到新创建的wip fiberNode树
+  // 因为这里的root是fiberRootNode，root.current字段指向hostRootFiber，那么root.current.alternate就是整个更新开始时执行的prepareFreshStack函数，创建的hostRootFiber对应的wip fiber；
+  // 因为做完了整套操作，所以这是一棵完整的fiber树
+  const finishedWork = root.current.alternate;
+  root.finishedWork = finishedWork;
+
+  // 根据wip fiberNode树，以及树中的flags，执行具体的DOM操作
+  commitRoot(root);
 }
 
 function workLoop() {
@@ -59,7 +69,7 @@ function workLoop() {
 function performUnitOfWork(fiber: FiberNode) {
   // 开始做递操作
   const next = beginWork(fiber);  // next可能是当前fiber的子fiber，也可能是null
-  next.memoizedProps = fiber.pendingProps;
+  fiber.memoizedProps = fiber.pendingProps;
 
   if (next === null) {  // 不存在子fiber：即当前节点已经是最深层的节点（递的环节结束）
     completeUnitOfWork(fiber);

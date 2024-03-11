@@ -45,7 +45,7 @@ export const enqueueUpdate = <State>(
 // updateQueue消费update的方法
 export const processUpdateQueue = <State>(
   baseState: State, // 初始状态
-  pendingUpdate: Update<State> // 要消费的update
+  pendingUpdate: Update<State> | null // 要消费的update
 ): { memoizedState: State } => {
   const result: ReturnType<typeof processUpdateQueue<State>> = { memoizedState: baseState };
 
@@ -57,6 +57,7 @@ export const processUpdateQueue = <State>(
       result.memoizedState = action(baseState);
     } else {
       // 如果baseState是1，update是(x) => 4x，那么memoizedState就是4
+      // action也有可能是ReactElement
       result.memoizedState = action;
     }
   }

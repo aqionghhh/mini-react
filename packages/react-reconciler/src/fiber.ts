@@ -1,6 +1,6 @@
 // 用于存放fiberNode数据结构
-import { Props, Key, Ref } from 'shared/ReactTypes';
-import { WorkTag } from './workTags';
+import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
+import { FunctionComponent, HostComponent, WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig'; // 在tsconfig中进行了配置，这里不用写死路径
 
@@ -19,6 +19,7 @@ export class FiberNode {
   memoizedState: any;
   alternate: FiberNode | null;
   flags: Flags;
+  subtreeFlags: Flags;
   updateQueue: unknown;
 
   // pendingProps是接下来有哪些props需要改变；key对应了ReactElement的key；tag是fiberNode是怎样的一个节点
@@ -49,6 +50,7 @@ export class FiberNode {
     this.alternate = null;  // 用于两个fiberNode之间进行切换
     // 将flags统称为副作用
     this.flags = NoFlags; // 标记
+    this.subtreeFlags = NoFlags; // 子树中包含的flags
   }
 
 };
@@ -83,6 +85,7 @@ export const createWorkInProgress = (current: FiberNode, pendingProps: Props): F
     // update
     wip.pendingProps = pendingProps;
     wip.flags = NoFlags;  // 清除副作用
+    wip.subtreeFlags = NoFlags;
   }
   wip.type = current.type;
   wip.updateQueue = current.updateQueue;
@@ -91,4 +94,21 @@ export const createWorkInProgress = (current: FiberNode, pendingProps: Props): F
   wip.memoizedState = current.memoizedState;
 
   return wip;
+}
+
+export function createFiberFromElement(element: ReactElementType): FiberNode {
+  const { type, key, props } = element;
+  // 根据不同的type，返回不同的fiberNode
+  let fiberTag: WorkTag = FunctionComponent;  // 默认是FunctionComponent
+
+  if (typeof type === 'string') { // 对于一个<div></div>来说的话，type就是string类型
+    fiberTag = HostComponent;
+  } else if (typeof type !== 'function' && __DEV__) {
+    console.warn('未定义的type类型', element);
+  }
+
+  const fiber = new FiberNode(fiberTag, props, key);
+  fiber.type = type;
+
+  return fiber;
 }
