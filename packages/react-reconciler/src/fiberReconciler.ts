@@ -12,7 +12,7 @@ export function createContainer(container: Container) { // 执行ReactDOM.create
   const hostRootFiber = new FiberNode(HostRoot, {}, null);
   const root = new FiberRootNode(container, hostRootFiber);
 
-  hostRootFiber.updateQueue = createUpdateQueue;
+  hostRootFiber.updateQueue = createUpdateQueue();
   return root;
 }
 
