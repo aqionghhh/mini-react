@@ -82,7 +82,7 @@ function getHostParent(fiber: FiberNode): Container | null {
 function appendPlaceNodeIntoContainer(finishedWork: FiberNode, hostParent: Container) {
   // 传入的finishedWork不一定是host类型的fiber节点，所以需要向下遍历；通过传入的fiber，找到对应的宿主环境（host类型）的fiber，然后append到hostParent下
   if (finishedWork.tag === HostComponent || finishedWork.tag === HostText) {
-    appendChildToContainer(finishedWork.stateNode, hostParent);  
+    appendChildToContainer(hostParent, finishedWork.stateNode);  
     return;
   }
   // 向下遍历（递归）
