@@ -1,6 +1,6 @@
 // 递归中的归阶段
 
-import { appendInitialChild, createInstance, createTextInstance } from "hostConfig";
+import { Container, appendInitialChild, createInstance, createTextInstance } from "hostConfig";
 import { FiberNode } from "./fiber";
 import { HostComponent, HostRoot, HostText } from "./workTags";
 import { NoFlags } from "./fiberFlags";
@@ -48,7 +48,7 @@ export const completeWork = (wip: FiberNode) => {
 
 // 在parent下插入wip这个节点
 // wip有可能不是一个DOM节点，所以需要对wip做一个递归的流程，寻找它里面的HostComponent和HostText类型的节点
-function appendAllChildren(parent: FiberNode, wip: FiberNode) {
+function appendAllChildren(parent: Container, wip: FiberNode) {
   let node = wip.child;
 
   // 先往下找，找到后执行appendChild的操作，如果没找到就继续往下找 

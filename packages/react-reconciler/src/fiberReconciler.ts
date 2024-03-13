@@ -16,7 +16,7 @@ export function createContainer(container: Container) { // 执行ReactDOM.create
   return root;
 }
 
-export function updateQueueContainer(element: ReactElementType | null, root: FiberRootNode) {  // 接着执行ReactDOM.createRoot().render()的render方法时，就会执行该函数
+export function updateContainer(element: ReactElementType | null, root: FiberRootNode) {  // 接着执行ReactDOM.createRoot().render()的render方法时，就会执行该函数
   const hostRootFiber = root.current;
 
   // 首屏渲染出发更新

@@ -29,7 +29,8 @@ export function getPackageJSON(pkgName) {  // 接收一个包名，返回对应�
 // 获取所有的基础plugins
 export function getBaseRollupPlugins({
   alias = { // 为开发环境增加__DEV__标识
-    __DEV__: true
+    __DEV__: true,
+    preventAssignment: true,  // 执行打包时的提示，不进行配置的话默认为false，所以这里使用推荐配置，改成true
   },
   typescript = {} // rollup-plugin-typescript2插件需要传参
 } = {}) {

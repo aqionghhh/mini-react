@@ -52,10 +52,12 @@ const commitPlacement = (finishedWork: FiberNode) => {
   // 需要知道父级的DOM节点
   const hostParent = getHostParent(finishedWork);
   // 需要知道当前finishedWork对应的DOM节点
-  appendPlaceNodeIntoContainer(finishedWork, hostParent);
+  if (hostParent !== null) {
+    appendPlaceNodeIntoContainer(finishedWork, hostParent);
+  }
 }
 
-function getHostParent(fiber: FiberNode) {
+function getHostParent(fiber: FiberNode): Container | null {
   // 执行向上遍历的过程
   let parent = fiber.return;
   while (parent) {
@@ -72,6 +74,8 @@ function getHostParent(fiber: FiberNode) {
   if (__DEV__) {
     console.warn('未找到host parent');
   }
+
+  return null;
 }
 
 // 将新增的节点插入到container
