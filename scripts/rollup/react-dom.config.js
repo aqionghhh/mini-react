@@ -17,12 +17,12 @@ export default [
     output: [ // 为了做兼容处理（react18和react17及以前版本），需要导出成两个包
       {
         file: `${pkgDistPath}/index.js`,
-        name: 'index.js',
+        name: 'ReactDOM', // 之前这里写的index.js，这是不对的，因为这是umd的包（如果是esm的包可以这么写），在浏览器中通过window来取的话，当前这个包的名字不叫window.ReactDOM，而是window['index.js']
         format: 'umd',
       },
       {
         file: `${pkgDistPath}/client.js`,
-        name: 'client.js',
+        name: 'client', // 之前这里写的client.js，这是不对的，因为这是umd的包（如果是esm的包可以这么写），在浏览器中通过window来取的话，当前这个包的名字不叫window.client，而是window.client
         format: 'umd',
       }
     ],
@@ -52,6 +52,21 @@ export default [
           main: 'index.js', // 输出产物的入口
         })
       })
+    ], // 打包过程中使用的插件
+  },
+  // react-test-utils
+  {
+    input:  `${pkgPath}/test-utils.ts`,  // 输入文件
+    output: [ // 为了做兼容处理（react18和react17及以前版本），需要导出成两个包
+      {
+        file: `${pkgDistPath}/test-utils.js`,
+        name: 'testUtils.js',
+        format: 'umd',
+      },
+    ],
+    external: ['react-dom', 'react'],
+    plugins: [
+      ...getBaseRollupPlugins(), 
     ], // 打包过程中使用的插件
   },
 ]

@@ -1,5 +1,6 @@
 {
   "compileOnSave": true,
+  "include": ["./packages/**/*"],   // 约束一下打包的目录，不要把demo文件一起打包进去了
   "compilerOptions": {
    "target": "ESNext",
    "useDefineForClassFields": true,
