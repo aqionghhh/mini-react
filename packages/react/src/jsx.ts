@@ -15,6 +15,10 @@ const ReactElement = function (type: Type, key: Key, ref: Ref, props: Props): Re
 	return element;
 };
 
+export function isValidElement(object: any) {
+	return typeof object === 'object' && object !== null && object.$$typeof === REACT_ELEMENT_TYPE; 
+}
+
 // <div id="333">123</div>
 // 注意：jsx和createElement方法接收的参数不同，详情可自行在babel官网查看
 export const createElement = (type: ElementType, config: any, ...maybeChildren: any) => {
@@ -56,14 +60,10 @@ export const createElement = (type: ElementType, config: any, ...maybeChildren: 
   return ReactElement(type, key, ref, props);
 };
 
-export const jsx = (type: ElementType, config: any, maybeKey: any) => {
+export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
 	const props: Props = {};
 	let key: Key = null;
 	let ref: Ref = null;
-
-	if (maybeKey !== undefined) { // 在jsx方法中，key会作为第三个参数传入
-		key = '' + maybeKey;
-	}
 
 	for (const prop in config) {
 		const val = config[prop];
@@ -84,10 +84,19 @@ export const jsx = (type: ElementType, config: any, maybeKey: any) => {
 		}
 	}
 
+	const maybeChildrenLength = maybeChildren.length;
+  if (maybeChildrenLength) {  // 存在多余的children
+    // 存在两种情况：[child]  [child, child, child]
+    if (maybeChildrenLength === 1) {  // 长度为1时，就可以直接赋值
+      props.children = maybeChildren[0];
+    } else {
+      props.children = maybeChildren;
+    }
+  }
+
 	return ReactElement(type, key, ref, props);
 };
 
-// 在这里生产环境和开发环境的jsx都是同样的实现（但是实际上的react中，jsxDEV和jsx的实现并不相同，在dev环境中会多做一些检查）
 export const jsxDEV = (type: ElementType, config: any) => {
 	const props: Props = {};
 	let key: Key = null;
