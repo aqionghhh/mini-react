@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 
 function App() {
@@ -10,8 +10,9 @@ function App() {
 }
 
 function Child() {
+  const [num] = useState(10);
   return (
-    <span>bbb</span>
+    <span>{num}</span>
   )
 }
 

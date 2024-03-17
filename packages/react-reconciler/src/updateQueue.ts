@@ -1,3 +1,4 @@
+import { Dispatch } from 'react/src/currentDispatcher';
 import { Action } from 'shared/ReactTypes';
 
 // 对于React来说，有两种触发更新的方式，比如说：
@@ -12,7 +13,8 @@ export interface UpdateQueue<State> {
   // 为什么UpdateQueue是这样的一个结构：因为在createWorkInProgress函数中，能让wip和current共用同一个updateQueue
   shared: {
     pending: Update<State> | null;
-  }
+  };
+  dispatch: Dispatch<State> | null;  // 为了兼容hooks；扩展一个dispatch方法，用于保存hooks的dispatch
 }
 
 // 创建Update实例的方法：createUpdate
@@ -30,7 +32,8 @@ export const createUpdateQueue = <State>() => {
   return {
     shared: {
       pending: null
-    }
+    },
+    dispatch: null,
   } as UpdateQueue<State>;
 }
 

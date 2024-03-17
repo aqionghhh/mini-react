@@ -6,7 +6,7 @@ import {
   getBaseRollupPlugins, 
 } from './utils';
 
-const { name, module } = getPackageJSON('react-dom'); // 读文件夹名为react-dom包的package.json
+const { name, module, peerDependencies } = getPackageJSON('react-dom'); // 读文件夹名为react-dom包的package.json
 const pkgPath = resolvePkgPath(name); // react-dom的包路径
 const pkgDistPath = resolvePkgPath(name, true); // react-dom的产物路径
 
@@ -25,6 +25,9 @@ export default [
         name: 'client.js',
         format: 'umd',
       }
+    ],
+    external: [ // react-dom在打包的时候，xxx对于react-dom来说是一个外部的包，外部的包就不会被打入react-dom中
+      ...Object.keys(peerDependencies)  // 将react包排出在外，目的是为了让两者共享数据（共享内部的数据共享层）
     ],
     plugins: [
       ...getBaseRollupPlugins(), 
