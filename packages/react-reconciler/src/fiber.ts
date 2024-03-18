@@ -21,6 +21,7 @@ export class FiberNode {
   flags: Flags;
   subtreeFlags: Flags;
   updateQueue: unknown;
+  deletions: FiberNode[] | null;
 
   // pendingProps是接下来有哪些props需要改变；key对应了ReactElement的key；tag是fiberNode是怎样的一个节点
   constructor(tag: WorkTag, pendingProps: Props, key: Key) {
@@ -51,6 +52,7 @@ export class FiberNode {
     // 将flags统称为副作用
     this.flags = NoFlags; // 标记
     this.subtreeFlags = NoFlags; // 子树中包含的flags
+    this.deletions = null;
   }
 
 };
@@ -82,10 +84,12 @@ export const createWorkInProgress = (current: FiberNode, pendingProps: Props): F
     wip.alternate = current;
     current.alternate = wip;
   } else {
+    // 为什么要在update做这些重置的操作？？？
     // update
     wip.pendingProps = pendingProps;
     wip.flags = NoFlags;  // 清除副作用
     wip.subtreeFlags = NoFlags;
+    wip.deletions = null;
   }
   wip.type = current.type;
   wip.updateQueue = current.updateQueue;

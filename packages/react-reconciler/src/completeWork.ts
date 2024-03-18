@@ -3,7 +3,11 @@
 import { Container, appendInitialChild, createInstance, createTextInstance } from "hostConfig";
 import { FiberNode } from "./fiber";
 import { FunctionComponent, HostComponent, HostRoot, HostText } from "./workTags";
-import { NoFlags } from "./fiberFlags";
+import { NoFlags, Update } from "./fiberFlags";
+
+function markUpdate(fiber: FiberNode) {
+  fiber.flags |= Update;
+}
 
 export const completeWork = (wip: FiberNode) => {
   const newProps = wip.pendingProps;
@@ -25,7 +29,12 @@ export const completeWork = (wip: FiberNode) => {
     return null;
     case HostText:
       if (current !== null && wip.stateNode) { // update阶段
-        
+        const oldText = current.memoizedProps.content;
+        const newText = newProps.content;
+
+        if (oldText !== newText) {  // 标记更新
+          markUpdate(wip);
+        }
       } else {  // mount阶段
         // 构建离屏DOM树
         // 1. 构建DOM（创建一个文本节点）
