@@ -10,10 +10,10 @@ function App() {
 }
 
 function Child() {
-  const [num] = useState(10);
-  return (
-    <span>{num}</span>
-  )
+  const [num, setNum] = useState(10);
+  window.setNum = setNum
+  console.log('num', num)
+  return num === 3 ? <span>{num}</span> : 111
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

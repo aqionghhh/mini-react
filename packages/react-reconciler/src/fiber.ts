@@ -77,8 +77,7 @@ export const createWorkInProgress = (current: FiberNode, pendingProps: Props): F
 
   if (wip === null) { // 首屏渲染为null，即mount阶段
     // mount
-    wip = new FiberNode(current.tag, current.pendingProps, current.key);
-    wip.type = current.type;
+    wip = new FiberNode(current.tag, pendingProps, current.key);
     wip.stateNode = current.stateNode;
 
     wip.alternate = current;

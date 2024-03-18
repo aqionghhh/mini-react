@@ -34,7 +34,7 @@ function ChildReconciler(shouldTrackEffects: boolean) {
           if (currentFiber.type === element.type) { // type 相同
             // key和type都相同，可以复用
             const existing = useFiber(currentFiber, element.props);
-            existing.return = currentFiber;
+            existing.return = returnFiber;
             return existing;
           }
           // key相同，type不同
@@ -68,7 +68,7 @@ function ChildReconciler(shouldTrackEffects: boolean) {
       // update流程
       if (currentFiber.tag === HostText) {  // 节点的类型没有改变，可以复用
         const existing = useFiber(currentFiber, { content });
-        existing.return = currentFiber;
+        existing.return = returnFiber;
         return existing;
       } else {
         // eg: <div></div> 变成了 hahaha (原本的是hostComponent，变成了hostText)
