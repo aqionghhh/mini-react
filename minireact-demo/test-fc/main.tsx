@@ -2,9 +2,11 @@ import { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 
 function App() {
+  const [num, setNum] = useState(10);
   return (
     <div>
-      <Child />
+      {/* <Child /> */}
+      <div onClickCapture={() => setNum(num + 1)}>{num}</div>
     </div>
   )
 }

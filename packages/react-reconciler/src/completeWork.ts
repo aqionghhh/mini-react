@@ -4,6 +4,7 @@ import { Container, appendInitialChild, createInstance, createTextInstance } fro
 import { FiberNode } from "./fiber";
 import { FunctionComponent, HostComponent, HostRoot, HostText } from "./workTags";
 import { NoFlags, Update } from "./fiberFlags";
+import { updateFiberProps } from "react-dom/src/SyntheticEvent";
 
 function markUpdate(fiber: FiberNode) {
   fiber.flags |= Update;
@@ -16,6 +17,10 @@ export const completeWork = (wip: FiberNode) => {
   switch (wip.tag) {
     case HostComponent:
       if (current !== null && wip.stateNode) { // update阶段
+        // 1. 需要判断props是否变化   eg：{onClick: aaa} => {onClick: bbb}  还有像className、style之类的属性
+        updateFiberProps(wip.stateNode, newProps);  // 判断props变化有点繁琐，这里没有判断props变化 直接赋值
+
+        // TODO 2. 发生变化，需要打上一个Update flag
         
       } else {  // mount阶段
         // 构建离屏DOM树

@@ -1,5 +1,6 @@
 import { FiberNode } from "react-reconciler/src/fiber";
-import { HostText } from "react-reconciler/src/workTags";
+import { HostComponent, HostText } from "react-reconciler/src/workTags";
+import { DOMElement, updateFiberProps } from './SyntheticEvent'
 
 // 描述宿主环境方法的文件
 export type Container = Element;  // 对于react-dom来说，Container的类型是Element
@@ -10,8 +11,9 @@ export type TextInstance = Text;
 export const createInstance = (type: string, props: any): Instance => {
   //TODO: 处理props
 
-  const element = document.createElement(type); // 创建一个节点
-  return element;
+  const element = document.createElement(type) as unknown; // 创建一个节点
+  updateFiberProps(element as DOMElement, props); // 在创建DOM时，将事件回调保存在DOM上
+  return element as DOMElement ;
 }
 
 // 插入子节点
@@ -33,6 +35,9 @@ export function commitUpdate(fiber: FiberNode) {
     case HostText:
       const text = fiber.memoizedProps.content;
       commitTextUpdate(fiber.stateNode, text);
+      break;
+    case HostComponent:
+
       break;
   
     default:
