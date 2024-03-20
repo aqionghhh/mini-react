@@ -4,6 +4,7 @@ import { REACT_ELEMENT_TYPE } from "shared/ReactSymbols";
 import { HostText } from "./workTags";
 import { ChildDeletion, Placement } from "./fiberFlags";
 
+type ExistingChildren = Map<string | number, FiberNode>;
 
 function ChildReconciler(shouldTrackEffects: boolean) {
   // 删除子节点
@@ -21,13 +22,25 @@ function ChildReconciler(shouldTrackEffects: boolean) {
     }
   }
 
+  function deleteRemainingChildren(returnFiber: FiberNode, currentFirstChild: FiberNode | null) {
+    if (!shouldTrackEffects) {
+      return;
+    }
+    let childToDelete = currentFirstChild;
+    while (childToDelete !== null) {  // 遍历传入的child以及它的sibling
+       deleteChild(returnFiber, childToDelete);
+       childToDelete = childToDelete.sibling;
+    }
+  }
+
+  // 单一节点
   function reconcileSingleElement(
     returnFiber: FiberNode, 
     currentFiber: FiberNode | null, 
     element: ReactElementType
   ) {  // 接收父亲fiber、当前的fiber、ReactElement
     const key = element.key;
-    work: if (currentFiber !== null ) {
+    while (currentFiber !== null) {
       // update
       if (currentFiber.key === key) { //key相同
         if (element.$$typeof === REACT_ELEMENT_TYPE) {  // 比较type之前需要判断一下element是不是一个ReactElement
@@ -35,20 +48,24 @@ function ChildReconciler(shouldTrackEffects: boolean) {
             // key和type都相同，可以复用
             const existing = useFiber(currentFiber, element.props);
             existing.return = returnFiber;
+
+            // 当前节点可复用，标记剩下的节点删除
+            deleteRemainingChildren(returnFiber, currentFiber.sibling); // 既然当前节点可复用，那么就传入它的兄弟节点currentFiber，把剩余的兄弟节点都删掉
+
             return existing;
           }
           // key相同，type不同
-          deleteChild(returnFiber, currentFiber); // 删掉旧的
-          break work;
+          deleteRemainingChildren(returnFiber, currentFiber); // 删掉所有旧的
+          break;
         } else {
           if (__DEV__) {
             console.warn('还未实现的react类型', element);
-            break work;
+            break;
           }
         }
       } else {  // key不相同
-        deleteChild(returnFiber, currentFiber); // 删掉旧的
-        break work;
+        deleteChild(returnFiber, currentFiber); // 删掉旧的，继续遍历sibling
+        currentFiber = currentFiber.sibling;
       }
     }
 
@@ -59,23 +76,25 @@ function ChildReconciler(shouldTrackEffects: boolean) {
     return fiber;
   }
 
+  // 单一节点
   function reconcileSingleTextNode(
     returnFiber: FiberNode, 
     currentFiber: FiberNode | null, 
     content: string | number
   ) {  // 接收父亲fiber、当前的fiber、ReactElement
-    if (currentFiber !== null) {
+    while (currentFiber !== null) {
       // update流程
       if (currentFiber.tag === HostText) {  // 节点的类型没有改变，可以复用
         const existing = useFiber(currentFiber, { content });
         existing.return = returnFiber;
+        deleteRemainingChildren(returnFiber, currentFiber.sibling); // 既然当前节点可复用，那么就传入它的兄弟节点currentFiber，把剩余的兄弟节点都删掉
         return existing;
       } else {
         // eg: <div></div> 变成了 hahaha (原本的是hostComponent，变成了hostText)
         deleteChild(returnFiber, currentFiber); // 删掉旧的
+        currentFiber = currentFiber.sibling;
       }
     }
-
 
     const fiber = new FiberNode(HostText, { content }, null); // 自定义一下当前fiber的结构：包含一个content字段，用于保存文本内容
     fiber.return = returnFiber;
@@ -91,6 +110,115 @@ function ChildReconciler(shouldTrackEffects: boolean) {
     return fiber; // 不标记
   }
 
+  function reconcileChildrenArray(returnFiber: FiberNode, currentFirstChild: FiberNode | null, newChild: any[]) {
+    let lastPlaceIndex: number = 0; // 最后一个可复用fiber在current中的index
+    let lastNewFiber: FiberNode | null = null; // 创建的最后一个fiber
+    let firstNewFiber: FiberNode | null = null; // 创建的第一个fiber
+
+    // 1. 将current保存在map中
+    const existingChildren: ExistingChildren = new Map();
+    // 注：当前current是更新前的FiberNode，是一条单向的链表；而newChild是一个数组，因为是由jsx转换来的，所以这个数组中存放的每一项都是ReactElement
+    let current = currentFirstChild;
+    while (current !== null) {
+      const keyToUse = current.key !== null ? current.key : current.index;
+      existingChildren.set(keyToUse, current);  // 用当前current的key作为map的key，当前current作为map的value
+      current = current.sibling;
+    }
+
+    // 2. 遍历newChild，寻找是否可复用
+    for (let i = 0; i < newChild.length; i++) {
+      const after = newChild[i];
+      const newFiber = updateFromMap(returnFiber, existingChildren, i, after);
+      
+      if (newFiber === null) {  // xxx => false;  xxx => null
+        continue;
+      }
+
+      // 3. 标记移动还是插入（移动的具体是指 向右移动）
+      // 移动的判断依据：element的index与「element对应current fiber」的index的比较
+      // 如果可复用fiber的index < lastPlaceIndex，则标记Placement；否则 不标记
+      newFiber.index = i;
+      newFiber.return = returnFiber;
+
+      if (lastNewFiber === null) {
+        lastNewFiber = newFiber;
+        firstNewFiber = newFiber;
+      } else {
+        lastNewFiber.sibling = newFiber;
+        lastNewFiber = lastNewFiber.sibling;
+      }
+
+      if (!shouldTrackEffects) {
+        continue;
+      }
+
+      const current = newFiber.alternate;
+      if (current !== null) {
+        const oldIndex = current.index;
+        if (oldIndex < lastPlaceIndex) {  // 标记移动
+          newFiber.flags |= Placement;
+          continue;
+        } else {  // 不移动
+          lastPlaceIndex = oldIndex;  // 更新lastPlaceIndex为新fiber对应的index
+        }
+      } else {
+        // mount
+        newFiber.flags |= Placement;  // 插入
+      }
+    }
+
+    // 4. 将Map中剩下的标记为删除
+    existingChildren.forEach(fiber => {
+      deleteChild(returnFiber, fiber);
+    });
+
+    return firstNewFiber; // 返回第一个fiber
+  }
+
+  // 判断是否可复用（返回FiberNode的时候代表可复用，或是一个全新的fiber）
+  function updateFromMap(returnFiber: FiberNode, existingChildren: ExistingChildren, index: number, element: any): FiberNode | null {
+    const keyToUse = element.key !== null ? element.key : index;
+    const before = existingChildren.get(keyToUse);  //如果取到了 就代表在更新之前存在对应的节点
+
+    // 判断对应的节点是否能复用
+    if (typeof element === 'string' || typeof element === 'number') { // element是HostText类型
+      if (before) {
+        if (before.tag === HostText) {
+          existingChildren.delete(keyToUse);  // 可以复用的节点就从Map中删掉
+          return useFiber(before, { content: element + '' }); // 复用before对应的fiber 创建当前的wip fiber
+          // 为什么在这里不需要标记删除：因为判断完可复用节点后，所有的节点会统一 标记为删除，所以在这里不需要单独标记
+        }
+      }
+      return new FiberNode(HostText, { content: element + '' }, null);  // 创建一个新的element
+    }
+
+    // element是ReactElement类型
+    if (typeof element === 'object' && element !== null) {
+      switch (element.$$typeof) {
+        case REACT_ELEMENT_TYPE:
+          if (before) {
+            if (before.type === element.type) { // 走到这里代表key相同，type也相同
+              existingChildren.delete(keyToUse);  // 可以复用的节点就从Map中删掉
+              return useFiber(before, element.props); // 复用before对应的fiber 创建当前的wip fiber
+            }
+          }
+          return createFiberFromElement(element);  // 创建一个新的element
+      }
+    }
+    
+    // TODO element是数组或者Fragment的情况
+    // eg：<ul>
+    //       <li/>
+    //       <li/>
+    //       {[<li/>, <li/>]} // 这里的element是个数组类型
+    //    </ul>
+    if (Array.isArray(element) && __DEV__) {
+      console.warn('还未实现数组类型的child')
+    }
+    return null;
+  }
+
+
   // 为什么要设计成闭包的形式：这样可以根据是否传shouldTrackEffects，返回不同的reconcileChildFibers的实现
   // 三个参数：父亲FiberNode、当前的子节点的current FiberNode，子节点的ReactElement
   return function reconcileChildFibers(
@@ -105,12 +233,15 @@ function ChildReconciler(shouldTrackEffects: boolean) {
           return placeSingleChild(reconcileSingleElement(returnFiber, current, newChild));
         default:
           if (__DEV__) {
-            console.warn('未实现的reconsile类型', newChild);
+            console.warn('未实现的reconcile类型', newChild);
           }
           break;
       }
+      // 多节点的情况：eg： ul > li * 3
+      if (Array.isArray(newChild)) {
+        return reconcileChildrenArray(returnFiber, current, newChild);
+      }
     }
-    // TODO 多节点的情况：eg： ul > li * 3
     
     // HostText
     if (typeof newChild === 'string' || typeof newChild === 'number') { // 文本节点

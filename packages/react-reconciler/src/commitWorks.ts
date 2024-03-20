@@ -1,4 +1,4 @@
-import { Container, appendChildToContainer, commitUpdate, removeChild } from "hostConfig";
+import { Container, Instance, appendChildToContainer, commitUpdate, insertChildToContainer, removeChild } from "hostConfig";
 import { FiberNode, FiberRootNode } from "./fiber";
 import { ChildDeletion, MutationMask, NoFlags, Placement, Update } from "./fiberFlags";
 import { FunctionComponent, HostComponent, HostRoot, HostText } from "./workTags";
@@ -146,9 +146,49 @@ const commitPlacement = (finishedWork: FiberNode) => {
   
   // 需要知道父级的DOM节点
   const hostParent = getHostParent(finishedWork);
+
+  // 寻找到目标兄弟Host节点 执行插入操作（insertBefore）
+  // 注：要考虑两个因素：可能不是目标fiber的直接兄弟节点；不稳定的Host节点不能作为「目标兄弟Host节点」
+  const sibling = getHostSibling(finishedWork);
+
   // 需要知道当前finishedWork对应的DOM节点
   if (hostParent !== null) {
-    appendPlaceNodeIntoContainer(finishedWork, hostParent);
+    insertOrAppendPlaceNodeIntoContainer(finishedWork, hostParent, sibling);
+  }
+}
+
+function getHostSibling(fiber: FiberNode) {
+  let node: FiberNode = fiber;
+
+  findSibling: while (true) {
+    while (node.sibling === null) { // 向上查找
+      const parent = node.return;
+
+      if (parent === null || parent.tag === HostComponent || parent.tag === HostRoot) { // 没找到
+        return null;
+      }
+      node = parent;
+    }
+
+    node.sibling.return = node.return;
+    node = node.sibling;
+
+    while (node.tag !== HostText && node.tag !== HostComponent) { // 直接sibling不是host类型
+      // 向下遍历，寻找子孙节点
+      if ((node.flags & Placement) !== NoFlags) { // 代表这个节点是不稳定的，需要继续findSibling
+        continue findSibling;
+      }
+      if (node.child === null) {  // 找到底了
+        continue findSibling;
+      } else {  // 向下遍历
+        node.child.return = node;
+        node = node.child;
+      }
+    }
+
+    if ((node.flags & Placement) === NoFlags) {  // host类型
+      return node.stateNode;
+    }
   }
 }
 
@@ -174,20 +214,24 @@ function getHostParent(fiber: FiberNode): Container | null {
 }
 
 // 将新增的节点插入到container
-function appendPlaceNodeIntoContainer(finishedWork: FiberNode, hostParent: Container) {
+function insertOrAppendPlaceNodeIntoContainer(finishedWork: FiberNode, hostParent: Container, before?: Instance) {
   // 传入的finishedWork不一定是host类型的fiber节点，所以需要向下遍历；通过传入的fiber，找到对应的宿主环境（host类型）的fiber，然后append到hostParent下
   if (finishedWork.tag === HostComponent || finishedWork.tag === HostText) {
-    appendChildToContainer(hostParent, finishedWork.stateNode);  
+    if (before) {
+      insertChildToContainer(finishedWork.stateNode, hostParent, before); // 在stateNode之前插入节点
+    } else {
+      appendChildToContainer(hostParent, finishedWork.stateNode);  // 在container的末尾插入节点
+    }
     return;
   }
   // 向下遍历（递归）
   const child = finishedWork.child;
   if (child !== null) {
-    appendPlaceNodeIntoContainer(child, hostParent);
+    insertOrAppendPlaceNodeIntoContainer(child, hostParent);
     let sibling = child.sibling;
 
     while (sibling !== null) {
-      appendPlaceNodeIntoContainer(sibling, hostParent);
+      insertOrAppendPlaceNodeIntoContainer(sibling, hostParent);
       sibling = sibling.sibling;
     }
   }
