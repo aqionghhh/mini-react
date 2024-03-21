@@ -184,9 +184,20 @@ function ChildReconciler(shouldTrackEffects: boolean) {
     return firstNewFiber; // 返回第一个fiber
   }
 
+  function getElementKeyToUse(element: any, index?: number): Key {
+		if (
+			Array.isArray(element) ||
+			typeof element === 'string' ||
+			typeof element === 'number'
+		) {
+			return index;
+		}
+		return element.key !== null ? element.key : index;
+  }
+
   // 判断是否可复用（返回FiberNode的时候代表可复用，或是一个全新的fiber）
   function updateFromMap(returnFiber: FiberNode, existingChildren: ExistingChildren, index: number, element: any): FiberNode | null {
-    const keyToUse = element.key !== null ? element.key : index;
+    const keyToUse = getElementKeyToUse(element, index);
     const before = existingChildren.get(keyToUse);  //如果取到了 就代表在更新之前存在对应的节点
 
     // 判断对应的节点是否能复用
