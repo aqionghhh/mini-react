@@ -58,28 +58,50 @@ const commitMutationEffectOnFiber = (finishedWork: FiberNode) => {  // 当前的
   }
 }
 
+// 记录要被删除的child节点（因为在新增了Fragment类型之后，会出现这种情况：eg：要删除Fragment节点，会存在多个子树的根Host节点，所以需要删除两个p节点
+// <div>
+//  <>
+//    <p>xxx</p>
+//    <p>yyy</p>
+//  <>
+// <div>
+function recordHostChildrenToDelete(childrenToDelete: FiberNode[], unmountFiber: FiberNode) {
+  // 1. 找到第一个root host节点
+  const lastOne = childrenToDelete[childrenToDelete.length - 1];  // 找到最后一个节点
+  if (!lastOne) { // 数组为空，代表还没记录节点
+    childrenToDelete.push(unmountFiber);
+  } else {
+    // 下一次进入的unmountFiber不是第一个
+    let node = lastOne.sibling;
+    while (node !== null) {
+      if (unmountFiber === node) {
+        childrenToDelete.push(unmountFiber);
+      }
+      node = node.sibling;
+    }
+  }
+  // 2. 每找到一个host节点，判断下这个节点是不是 第一步找到那个节点的兄弟节点（只要是兄弟节点，就代表同级，那么久可以记录下这个同级的节点）
+
+}
+
 function commitDeletion(childToDelete: FiberNode) {
   // 注：当前删除的child可能会包含子树
   // eg: <div><App />123<div><Child /></div></div>
   // 当要删除外部的div时，要把div的内部元素一起删掉，但是里面包含不同类型的组件；对于不同类型的组件在被删除的情况下，需要做不同的处理
   // 子树会出现这些情况：如果是FC，需要做unmount、解绑ref的处理；如果是HostComponent，需要解绑ref；对于子树的根HostComponent，需要移除DOM（这里的eg中，根HostComponent是外部的div）
   // 所以在这个函数中需要做递归操作
-  let rootHostNode: FiberNode | null = null;  // rootHostNode就是这棵子树的根HostComponent
+  const rootChildrenToDelete: FiberNode[] = [];
 
   // 递归子树
   commitNestedComponent(childToDelete, unmountFiber => {
     switch (unmountFiber.tag) {
       case HostComponent:
-        if (rootHostNode === null) {
-          rootHostNode = unmountFiber;
-        }
+        recordHostChildrenToDelete(rootChildrenToDelete, unmountFiber);
         // TODO 解绑ref
         return;
 
       case HostText:
-        if (rootHostNode === null) {
-          rootHostNode = unmountFiber;
-        }
+        recordHostChildrenToDelete(rootChildrenToDelete, unmountFiber);
         return;
 
       case FunctionComponent:
@@ -94,11 +116,13 @@ function commitDeletion(childToDelete: FiberNode) {
     }
   });
 
-  // 移除rootHostNode
-  if (rootHostNode !== null) {
+  // 移除rootChildrenToDelete中的节点
+  if (rootChildrenToDelete.length !== 0) {
     const hostParent = getHostParent(childToDelete);
     if (hostParent !== null) {
-      removeChild((rootHostNode as FiberNode).stateNode, hostParent);
+      rootChildrenToDelete.forEach(node => {
+        removeChild(node.stateNode, hostParent);
+      })
     }
   }
 

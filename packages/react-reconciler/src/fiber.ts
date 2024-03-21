@@ -1,6 +1,6 @@
 // 用于存放fiberNode数据结构
 import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
-import { FunctionComponent, HostComponent, WorkTag } from './workTags';
+import { Fragment, FunctionComponent, HostComponent, WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig'; // 在tsconfig中进行了配置，这里不用写死路径
 
@@ -27,7 +27,7 @@ export class FiberNode {
   constructor(tag: WorkTag, pendingProps: Props, key: Key) {
     // 实例属性
     this.tag = tag; 
-    this.key = key;
+    this.key = key || null;
     // 对于一个HostComponent来说，比如说HostComponent是一个div的话，stateNode就保存了div这个DOM
     this.stateNode = null;
     this.type = null; ///fiberNode的类型，比如说对于FunctionComponent，那么它的type就是function本身，即() => {}
@@ -113,5 +113,10 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
   const fiber = new FiberNode(fiberTag, props, key);
   fiber.type = type;
 
+  return fiber;
+}
+
+export function createFiberFromFragment(elements: any[], key: Key): FiberNode {
+  const fiber = new FiberNode(Fragment, elements, key);
   return fiber;
 }

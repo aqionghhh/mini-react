@@ -1,4 +1,4 @@
-import { REACT_ELEMENT_TYPE } from 'shared/ReactSymbols';
+import { REACT_ELEMENT_TYPE, REACT_FRAGMENT_TYPE } from 'shared/ReactSymbols';
 import { Type, Key, Props, Ref, ElementType, ReactElementType } from 'shared/ReactTypes';
 //ReactElement(ReactElement是一个跟宿主环境无关的数据结构，所以其类型定义应该写在shared这个包中)
 
@@ -18,6 +18,8 @@ const ReactElement = function (type: Type, key: Key, ref: Ref, props: Props): Re
 export function isValidElement(object: any) {
 	return typeof object === 'object' && object !== null && object.$$typeof === REACT_ELEMENT_TYPE; 
 }
+
+export const Fragment = REACT_FRAGMENT_TYPE;
 
 // <div id="333">123</div>
 // 注意：jsx和createElement方法接收的参数不同，详情可自行在babel官网查看
