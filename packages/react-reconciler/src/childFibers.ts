@@ -250,7 +250,7 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 
     // 加一个兜底情况
     if (current !== null) {
-      deleteChild(returnFiber, current);
+      deleteRemainingChildren(returnFiber, current);
     }
 
     if (__DEV__) {
