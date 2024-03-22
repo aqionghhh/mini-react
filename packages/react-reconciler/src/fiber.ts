@@ -3,6 +3,7 @@ import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
 import { Fragment, FunctionComponent, HostComponent, WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig'; // 在tsconfig中进行了配置，这里不用写死路径
+import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 
 export class FiberNode {
   type: any;
@@ -62,12 +63,16 @@ export class FiberRootNode {
   container: Container;  // 对于浏览器（DOM环境）来说，这个container就是DOM节点；对于其他宿主环境，container就对应其他节点
   current: FiberNode; // fiberRootNode的current字段指向hostRootFiber，即传入的rootElement对应的fiber节点
   finishedWork: FiberNode | null; // 指向更新完成后的hostRootFiber（完成整个递归流程的hostRootFiber）
+  pendingLanes: Lanes;  // 代表所有未被消费的lane的集合
+  finishedLane: Lane;  // 代表本次更新消费的lane
 
   constructor(container: Container, hostRootFiber: FiberNode) {
     this.container = container;
     this.current = hostRootFiber;
     hostRootFiber.stateNode = this; // hostRootFiber的stateNode指向fiberRootNode
     this.finishedWork = null;
+    this.pendingLanes = NoLanes;
+    this.finishedLane = NoLane;
   }
 
 }

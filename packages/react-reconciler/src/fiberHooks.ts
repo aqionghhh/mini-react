@@ -4,10 +4,12 @@ import { Dispatch, Dispatcher } from "react/src/currentDispatcher";
 import { FiberNode } from "./fiber";
 import { UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate, processUpdateQueue } from "./updateQueue";
 import { scheduleUpdateOnFiber } from "./workLoop";
+import { Lane, NoLane, requestUpdateLane } from "./fiberLanes";
 
 let currentlyRenderingFiber: FiberNode | null = null; // 当前正在render的fiber
 let workInProgressHook: Hook | null = null; // 指向当前正在处理的hook（当前正在进入一个FC的beginWork阶段时，会处理当前链表中的每一个hook，需要一个指针来指向正在处理的hook）
 let currentHook: Hook | null = null; // update阶段相关的全局变量
+let renderLane: Lane = NoLane;
 
 const { currentDispatcher } = internals;
 
@@ -17,10 +19,11 @@ interface Hook {  // 它的数据结构要满足所有hooks（useEffect、useMem
   next: Hook | null;  // next指向下一个hook
 }
 
-export function renderWithHooks(wip: FiberNode) {
+export function renderWithHooks(wip: FiberNode, lane: Lane) {
   // 赋值操作
   currentlyRenderingFiber = wip;
   wip.memoizedState = null; // 设为null是因为在下面的操作中，会创建这条hooks链表，memoizedState就保存创建的这条链表
+  renderLane = lane; 
 
   const current = wip.alternate;
   if (current !== null) { // update阶段
@@ -40,6 +43,7 @@ export function renderWithHooks(wip: FiberNode) {
   currentlyRenderingFiber = null;
   workInProgressHook = null;
   currentHook = null;
+  renderLane = NoLane;
   
   return children;
 }
@@ -61,7 +65,7 @@ function updateState<State>(): [State, Dispatch<State>] {
   const pending = queue.shared.pending;
 
   if (pending !== null) {
-    const { memoizedState } = processUpdateQueue(hook.memoizedState, pending);
+    const { memoizedState } = processUpdateQueue(hook.memoizedState, pending, renderLane);
     hook.memoizedState = memoizedState;
   }
   
@@ -139,10 +143,11 @@ function dispatchSetState<State>(
   updateQueue: UpdateQueue<State>, 
   action: Action<State>
 ) {
+  const lane = requestUpdateLane();
   // 既然是要触发更新，那就创建一个update
-  const update = createUpdate(action);
+  const update = createUpdate(action, lane);
   enqueueUpdate(updateQueue, update); // 将update插入到updateQueue中 
-  scheduleUpdateOnFiber(fiber);  // 从当前触发更新的（也就是FC对应）fiber开始调度更新
+  scheduleUpdateOnFiber(fiber, lane);  // 从当前触发更新的（也就是FC对应）fiber开始调度更新
 }
 
 function mountWorkInProgressHook(): Hook {

@@ -59,3 +59,12 @@ export function removeChild(child: Instance | TextInstance, container: Container
 export function insertChildToContainer(child: Instance, container: Container, before: Instance) {
   container.insertBefore(child, before);
 }
+
+// 通过什么样的方式执行微任务和宏任务，是通过宿主环境决定的，所以写在react-dom中
+// 这里采用的也是优雅降级 queueMicrotask -> Promise -> setTimeout
+export const scheduleMicroTask = 
+  typeof queueMicrotask === 'function' 
+    ? queueMicrotask 
+    : typeof Promise === 'function' 
+    ? (callback: (...arg: any) => void) => Promise.resolve(null).then(callback) 
+    : setTimeout;

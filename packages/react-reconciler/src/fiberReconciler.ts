@@ -5,6 +5,7 @@ import { HostRoot } from "./workTags";
 import { UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate } from "./updateQueue";
 import { ReactElementType } from "shared/ReactTypes";
 import { scheduleUpdateOnFiber } from "./workLoop";
+import { requestUpdateLane } from "./fiberLanes";
 
 
 export function createContainer(container: Container) { // 执行ReactDOM.createRoot()时，就会执行该函数
@@ -18,12 +19,14 @@ export function createContainer(container: Container) { // 执行ReactDOM.create
 
 export function updateContainer(element: ReactElementType | null, root: FiberRootNode) {  // 接着执行ReactDOM.createRoot().render()的render方法时，就会执行该函数
   const hostRootFiber = root.current;
+  
+  const lane = requestUpdateLane();
 
   // 首屏渲染出发更新
-  const update = createUpdate<ReactElementType | null>(element);
+  const update = createUpdate<ReactElementType | null>(element, lane);
   enqueueUpdate(hostRootFiber.updateQueue as UpdateQueue<ReactElementType | null>, update);
 
-  scheduleUpdateOnFiber(hostRootFiber);
+  scheduleUpdateOnFiber(hostRootFiber, lane);
 
   return element;
 }
