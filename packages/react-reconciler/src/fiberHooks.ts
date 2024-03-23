@@ -5,6 +5,8 @@ import { FiberNode } from "./fiber";
 import { UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate, processUpdateQueue } from "./updateQueue";
 import { scheduleUpdateOnFiber } from "./workLoop";
 import { Lane, NoLane, requestUpdateLane } from "./fiberLanes";
+import { Flags, PassiveEffect } from "./fiberFlags";
+import { HookHasEffect, Passive } from "./hookEffectTag";
 
 let currentlyRenderingFiber: FiberNode | null = null; // 当前正在render的fiber
 let workInProgressHook: Hook | null = null; // 指向当前正在处理的hook（当前正在进入一个FC的beginWork阶段时，会处理当前链表中的每一个hook，需要一个指针来指向正在处理的hook）
@@ -19,10 +21,30 @@ interface Hook {  // 它的数据结构要满足所有hooks（useEffect、useMem
   next: Hook | null;  // next指向下一个hook
 }
 
+export interface Effect {
+  tag: Flags;
+  create: EffectCallBack | void;
+  destroy: EffectCallBack | void;
+  deps: EffectDeps;
+  next: Effect | null;
+}
+
+// 函数组件的updateQueue
+export interface FCUpdateQueue<State> extends UpdateQueue<State> {
+  lasEffect: Effect | null;  // 在传统UpdateQueue上新增了一个lasEffect字段，lasEffect指向Effect链表中的最后一个（为什么是最后一个：lasEffect.next就指向这个链表的第一个）
+}
+
+type EffectCallBack = () => void;
+type EffectDeps = any[] | null;
+
 export function renderWithHooks(wip: FiberNode, lane: Lane) {
   // 赋值操作
   currentlyRenderingFiber = wip;
+  // 重置hook链表
   wip.memoizedState = null; // 设为null是因为在下面的操作中，会创建这条hooks链表，memoizedState就保存创建的这条链表
+  // 重置effect链表
+  wip.updateQueue = null;
+
   renderLane = lane; 
 
   const current = wip.alternate;
@@ -49,12 +71,104 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
 }
 
 const HooksDispatcherOnMount: Dispatcher = {
-  useState: mountState
+  useState: mountState,
+  useEffect: mountEffect,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
-  useState: updateState
+  useState: updateState,
+  useEffect: updateEffect,
 };
+
+function updateEffect(create: EffectCallBack | void, deps: EffectDeps | void) {
+  // 找到当前useState对应的hook数据
+  const hook = updateWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  let destroy: EffectCallBack | void;
+
+  if (currentHook !== null) {
+    const prevEffect = currentHook.memoizedState as Effect; // 当前useEffect对应的currentHook的memoizedState就代表了当前effect在上一次更新时对应的effect
+    destroy = prevEffect.destroy;
+
+    if (nextDeps !== null) {
+      // 浅比较依赖
+      const prevDeps = prevEffect.deps;
+      if (areHookInputEqual(nextDeps, prevDeps)) {
+        // 相等就代表依赖没有改变；不应该触发回调
+        hook.memoizedState = pushEffect(Passive, create, destroy, nextDeps);
+        return;
+      }
+    }
+    // 浅比较不相等
+    (currentlyRenderingFiber as FiberNode).flags |= PassiveEffect;  
+    hook.memoizedState = pushEffect(Passive | HookHasEffect, create, destroy, nextDeps);
+  }
+}
+
+function areHookInputEqual(nextDeps: EffectDeps, prevDeps: EffectDeps) {
+  if (prevDeps === null || nextDeps === null) { // 比较失败
+    return false;
+  }
+  for (let i = 0; i < prevDeps.length && i < nextDeps.length; i++) {
+    if (Object.is(prevDeps[i], nextDeps[i])) {
+      continue;
+    }
+    return false;
+  }
+  return true;  // 全等就返回true
+}
+
+function mountEffect(create: EffectCallBack | void, deps: EffectDeps | void) {
+  // 找到当前useState对应的hook数据
+  const hook = mountWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+
+  (currentlyRenderingFiber as FiberNode).flags |= PassiveEffect;  // 在mount时，需要执行useEffect里的create函数
+
+  hook.memoizedState = pushEffect(Passive | HookHasEffect, create, undefined, nextDeps);  // mount时没有destroy，所以传入undefined
+}
+
+// Effect之间会形成一条单独的环状链表
+function pushEffect(
+  hookFlags: Flags, 
+  create: EffectCallBack | void, 
+  destroy: EffectCallBack | void, 
+  deps: EffectDeps
+): Effect {
+  const effect: Effect = {
+    tag: hookFlags,
+    create,
+    destroy,
+    deps,
+    next: null
+  };
+  const fiber = currentlyRenderingFiber as FiberNode;
+  const updateQueue = fiber.updateQueue as FCUpdateQueue<any>;
+  if (updateQueue === null) {
+    const updateQueue = createFCUpdateQueue();
+    fiber.updateQueue = updateQueue;
+    effect.next = effect; // 需要形成环状链表
+    updateQueue.lasEffect = effect;
+  } else {  // 插入effect
+    const lasEffect = updateQueue.lasEffect;
+    if (lasEffect === null) {
+      effect.next = effect; // 需要形成环状链表
+      updateQueue.lasEffect = effect;
+    } else {
+      const firstEffect = lasEffect.next;
+      lasEffect.next = effect;
+      effect.next = firstEffect;
+      updateQueue.lasEffect = effect;
+    }
+  }
+  return effect;
+}
+
+function createFCUpdateQueue<State>() {
+  const updateQueue = createUpdateQueue<State>() as FCUpdateQueue<State>;
+  updateQueue.lasEffect = null;
+  return updateQueue;
+}
 
 function updateState<State>(): [State, Dispatch<State>] {
   // 找到当前useState对应的hook数据

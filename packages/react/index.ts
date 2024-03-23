@@ -9,6 +9,12 @@ export const useState: Dispatcher['useState'] = (initialState) => {
   return dispatcher.useState(initialState);
 }
 
+export const useEffect: Dispatcher['useEffect'] = (create, deps) => {
+  // 获取Dispatcher中的useState
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useEffect(create, deps);
+}
+
 // 内部的数据共享层（变量名字可以自己取）
 export const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = {
   currentDispatcher

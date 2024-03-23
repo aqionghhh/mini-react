@@ -1,17 +1,20 @@
 // 完整的工作循环
 import { scheduleMicroTask } from "hostConfig";
 import { beginWork } from "./beginWork";
-import { commitMutationEffect } from "./commitWorks";
+import { commitHookEffectListCreate, commitHookEffectListDestroy, commitHookEffectListUnmount, commitMutationEffect } from "./commitWorks";
 import { completeWork } from "./completeWork";
-import { FiberNode, FiberRootNode, createWorkInProgress } from "./fiber";
-import { MutationMask, NoFlags } from "./fiberFlags";
+import { FiberNode, FiberRootNode, PendingPassiveEffects, createWorkInProgress } from "./fiber";
+import { MutationMask, NoFlags, PassiveMask } from "./fiberFlags";
 import { Lane, NoLane, SyncLane, getHighestPriority, markRootFinished, mergeLanes } from "./fiberLanes";
 import { flushSyncCallbacks, scheduleSyncCallback } from "./syncTaskQueue";
 import { HostRoot } from "./workTags";
+import { unstable_scheduleCallback as scheduleCallback, unstable_NormalPriority as NormalPriority } from 'scheduler';
+import { HookHasEffect, Passive } from "./hookEffectTag";
 
 // 定义一个全局变量存储fiberNode
 let workInProgress : FiberNode | null = null;
 let wipRootRenderLane : Lane = NoLane;  // 记录本次更新的lane是什么
+let rootDoesHasPassiveEffects: Boolean = false;
 
 // 用于执行初始化操作
 function prepareFreshStack(root: FiberRootNode, lane: Lane) {
@@ -129,15 +132,30 @@ function commitRoot(root: FiberRootNode) {
 
   markRootFinished(root, lane); // 移除该lane
 
+  if (
+    (finishedWork.flags & PassiveMask) !== NoFlags || 
+    (finishedWork.subtreeFlags & PassiveMask) !== NoFlags
+  ) { // 代表当前fiber树中 存在函数组件需要执行useEffect的回调
+    if (!rootDoesHasPassiveEffects) {
+      rootDoesHasPassiveEffects = true; // 防止多次commitRoot时，执行调度副作用的操作
+      // 调度副作用
+      scheduleCallback(NormalPriority, () => {
+        // 执行收集到的副作用
+        flushPassiveEffect(root.pendingPassiveEffects);
+        return;
+      }); // 理解为：要调度一个异步的回调函数，也就是传入的第二个参数；这个回调函数会在一个setTimeout中被调度，调度的优先级是NormalPriority
+    }
+  }
+
   // 判断是否存在三个子阶段需要执行的操作
   // 需要判断root的flags和subtreeFlags
-  const subtreeHasEffect = (finishedWork.subtreeFlags & MutationMask) !== NoFlags // 按位与
-  const rootHasEffect = (finishedWork.flags & MutationMask) !== NoFlags // 按位与
+  const subtreeHasEffect = (finishedWork.subtreeFlags & (MutationMask | PassiveMask)) !== NoFlags; // 按位与
+  const rootHasEffect = (finishedWork.flags & (MutationMask | PassiveMask)) !== NoFlags; // 按位与
   if (subtreeHasEffect || rootHasEffect) {
     // beforeMutation
     
     // mutation（eg：Placement）
-    commitMutationEffect(finishedWork);
+    commitMutationEffect(finishedWork, root);
     root.current = finishedWork;  // fiber树的切换（fiber树的切换时机发生在mutation执行完成和layout开始执行之前）
 
     // layout
@@ -145,6 +163,45 @@ function commitRoot(root: FiberRootNode) {
   } else {
     root.current = finishedWork;  // fiber树的切换（即使没有发生更新，也要执行切换操作）
   }
+
+  rootDoesHasPassiveEffects = false;
+  ensureRootIsScheduled(root);
+}
+
+function flushPassiveEffect(pendingPassiveEffects: PendingPassiveEffects) {
+  // 整体流程：
+  // 1. 首先触发所有unmount effect，且对于某个fiber，如果触发了unmount destroy，本次更新不会再触发update create
+  pendingPassiveEffects.unmount.forEach(effect => { // 先执行unmount
+    commitHookEffectListUnmount(Passive, effect); // 当前是useEffect的unmount执行（如果需要实现useLayoutEffect的话，可以直接把Passive改成Layout）
+  });
+  pendingPassiveEffects.unmount = []; 
+
+  // 2. 触发所有上次更新的destroy
+  // 本次更新的任何create回调都必须在所有上一次更新的destroy回调执行完后再执行。
+  pendingPassiveEffects.update.forEach(effect => {
+    commitHookEffectListDestroy(Passive | HookHasEffect, effect); // 对于所有effect来说，它不仅要是useEffect，必须是标记了HookHasEffect才能触发该函数
+  });
+
+  // 3. 触发所有这次更新的create
+  pendingPassiveEffects.update.forEach(effect => {
+    commitHookEffectListCreate(Passive | HookHasEffect, effect); // 对于所有effect来说，它不仅要是useEffect，必须是标记了HookHasEffect才能触发该函数
+  });
+  pendingPassiveEffects.update = []; 
+
+  // 对于在执行回调的过程中，还有可能会触发新的更新，那么就需要继续处理更新流程；eg：
+  // const [num, updateNum] = useState(0);
+  // useEffect(() => {
+  //   console.log('App mount');
+  //   updateNum(2)
+  // }, []);
+
+  // useEffect(() => {
+  //   console.log('num change create', num);
+  //   return () => {
+  //     console.log('num change destroy', num);
+  //   };
+  // }, [num]);
+  flushSyncCallbacks();
 }
 
 function workLoop() {
