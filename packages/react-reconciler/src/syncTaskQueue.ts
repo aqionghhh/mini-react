@@ -22,6 +22,7 @@ export function flushSyncCallbacks() {  // 遍历执行同步的回调函数
       }
     } finally {
       isFlushingSyncQueue = false;
+      syncQueue = null;
     }
   }
 }
