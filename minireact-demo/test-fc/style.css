@@ -1,0 +1,16 @@
+span {
+  word-break: break-all;
+}
+
+.pri-1 {
+  color: gray;
+}
+.pri-2 {
+  color: cadetblue;
+}
+.pri-3 {
+  color: darkblue;
+}
+.pri-4 {
+  color: darkgoldenrod;
+}
