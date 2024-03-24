@@ -37,8 +37,7 @@ export function commitUpdate(fiber: FiberNode) {
       commitTextUpdate(fiber.stateNode, text);
       break;
     case HostComponent:
-
-      break;
+      return updateFiberProps(fiber.stateNode, fiber.memoizedProps);
   
     default:
       if (__DEV__) {

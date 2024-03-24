@@ -27,7 +27,8 @@ export default [
       }
     ],
     external: [ // react-dom在打包的时候，xxx对于react-dom来说是一个外部的包，外部的包就不会被打入react-dom中
-      ...Object.keys(peerDependencies)  // 将react包排出在外，目的是为了让两者共享数据（共享内部的数据共享层）
+      ...Object.keys(peerDependencies),  // 将react包排出在外，目的是为了让两者共享数据（共享内部的数据共享层）
+      'scheduler' // 调度器作为外部依赖，不能打包进react-dom中
     ],
     plugins: [
       ...getBaseRollupPlugins(), 

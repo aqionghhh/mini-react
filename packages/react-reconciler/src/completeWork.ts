@@ -1,10 +1,9 @@
 // 递归中的归阶段
 
-import { Container, appendInitialChild, createInstance, createTextInstance } from "hostConfig";
+import { Container, Instance, appendInitialChild, createInstance, createTextInstance } from "hostConfig";
 import { FiberNode } from "./fiber";
 import { Fragment, FunctionComponent, HostComponent, HostRoot, HostText } from "./workTags";
 import { NoFlags, Update } from "./fiberFlags";
-import { updateFiberProps } from "react-dom/src/SyntheticEvent";
 
 function markUpdate(fiber: FiberNode) {
   fiber.flags |= Update;
@@ -17,11 +16,10 @@ export const completeWork = (wip: FiberNode) => {
   switch (wip.tag) {
     case HostComponent:
       if (current !== null && wip.stateNode) { // update阶段
-        // 1. 需要判断props是否变化   eg：{onClick: aaa} => {onClick: bbb}  还有像className、style之类的属性
-        updateFiberProps(wip.stateNode, newProps);  // 判断props变化有点繁琐，这里没有判断props变化 直接赋值
+        // TODO 1. 需要判断props是否变化   eg：{onClick: aaa} => {onClick: bbb}  还有像className、style之类的属性
+        // 2. 发生变化，需要打上一个Update flag
 
-        // TODO 2. 发生变化，需要打上一个Update flag
-        
+        markUpdate(wip);  // 直接标记需要update（判断props变化有点繁琐，这里没有判断props变化）
       } else {  // mount阶段
         // 构建离屏DOM树
         // 1. 构建DOM
@@ -64,7 +62,7 @@ export const completeWork = (wip: FiberNode) => {
 
 // 在parent下插入wip这个节点
 // wip有可能不是一个DOM节点，所以需要对wip做一个递归的流程，寻找它里面的HostComponent和HostText类型的节点
-function appendAllChildren(parent: Container, wip: FiberNode) {
+function appendAllChildren(parent: Container | Instance, wip: FiberNode) {
   let node = wip.child;
 
   // 先往下找，找到后执行appendChild的操作，如果没找到就继续往下找 

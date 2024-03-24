@@ -10,5 +10,13 @@ module.exports = {
     // 对于第三方依赖
     ...defaults.moduleDirectories
   ],
-  testEnvironment: 'jsdom'
+  testEnvironment: 'jsdom',
+  moduleNameMapper: { // 在jest测试的情况下，需要将scheduler包指向测试环境下的调度器
+    '^scheduler$': '<rootDir>/node_modules/scheduler/unstable_mock.js'
+  },
+  fakeTimers: { // 指定假的计时器
+    enableGlobally: true,
+    legacyFakeTimers: true
+  },
+  setupFilesAfterEnv: ['./scripts/jest/setupJest.js'] // 指定matchers的目录
 };
