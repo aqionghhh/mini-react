@@ -1,6 +1,7 @@
 // 创建ReactDOM与Reconciler的连接
 // 合成事件文件，存放与ReactDOM相关的事件系统
 import { Container } from 'hostConfig';
+import { unstable_ImmediatePriority, unstable_NormalPriority, unstable_UserBlockingPriority, unstable_runWithPriority } from 'scheduler';
 import { Props } from 'shared/ReactTypes';
 
 export const elementPropsKey = '__props';
@@ -65,8 +66,10 @@ function dispatchEvent(container: Container, eventType: string, e: Event) {
 function triggerEventFlow(paths: EventCallback[], se: SyntheticEvent) {
   for (let i = 0; i < paths.length; i++) {
     const callback = paths[i];
-    callback.call(null,se);
-
+    // 将当前上下文环境对应的优先级改成传入的优先级
+    unstable_runWithPriority(evenTypeToSchedulerPriority(se.type), () => {
+      callback.call(null,se);
+    });
     if (se.__stopPropagation) { // 阻止事件继续传播
       break;
     }
@@ -133,4 +136,21 @@ function collectPaths(targetElement: DOMElement, container: Container, eventType
     targetElement = targetElement.parentNode as DOMElement;
   }
   return paths;
+}
+
+// 通过事件类型 转换到调度器的优先级
+function evenTypeToSchedulerPriority (eventType: string) {
+  switch (eventType) {
+    // 同步优先级，优先级：1
+    case 'click':
+    case 'keydown':
+    case 'keyup':
+      return unstable_ImmediatePriority;
+    // 优先级：2
+    case 'scroll':
+      return unstable_UserBlockingPriority;
+    // 优先级：3
+    default:
+      return unstable_NormalPriority;
+  }
 }

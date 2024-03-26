@@ -2,7 +2,7 @@ import internals from "shared/internals";
 import { Action } from "shared/ReactTypes";
 import { Dispatch, Dispatcher } from "react/src/currentDispatcher";
 import { FiberNode } from "./fiber";
-import { UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate, processUpdateQueue } from "./updateQueue";
+import { Update, UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate, processUpdateQueue } from "./updateQueue";
 import { scheduleUpdateOnFiber } from "./workLoop";
 import { Lane, NoLane, requestUpdateLane } from "./fiberLanes";
 import { Flags, PassiveEffect } from "./fiberFlags";
@@ -19,6 +19,8 @@ interface Hook {  // 它的数据结构要满足所有hooks（useEffect、useMem
   memoizedState: any; // 如果当前的hook是useState的话，memoizedState就是它保存的状态；对于不同的hook，它的memoizedState定义是不一样的
   updateQueue: unknown;
   next: Hook | null;  // next指向下一个hook
+  baseState: any;
+  baseQueue: Update<any> | null;
 }
 
 export interface Effect {
@@ -176,12 +178,40 @@ function updateState<State>(): [State, Dispatch<State>] {
 
   // 计算新state的逻辑
   const queue = hook.updateQueue as UpdateQueue<State>;
+  const baseState = hook.baseState;
+  
   const pending = queue.shared.pending;
-  queue.shared.pending = null;
+  const current = currentHook as Hook;
+  let baseQueue = current.baseQueue;
 
+
+  
   if (pending !== null) {
-    const { memoizedState } = processUpdateQueue(hook.memoizedState, pending, renderLane);
-    hook.memoizedState = memoizedState;
+    // pending和baseQueue的update保存在current中
+    if (baseQueue !== null) { // baseQueue存在
+      // 与pending进行合并 eg：
+      // baseQueue： b2 -> b0 -> b1 -> b2
+      // pending p2 -> p0 -> p1 -> p2
+      const baseFirst = baseQueue.next; // b0
+      const PendingFirst = pending.next;  // p0
+      baseQueue.next = PendingFirst;  // b2指向p0
+      pending.next = baseFirst; // p2指向b0
+      // 最后形成：p2 -> b0 -> b1 -> b2 -> p0 -> p1 -> p2
+    }
+    baseQueue = pending;
+    current.baseQueue = pending;  // 保存在current中
+    queue.shared.pending = null;
+
+    if (baseQueue !== null) {
+      const { 
+        memoizedState, 
+        baseQueue: newBaseQueue, 
+        baseState: newBaseState 
+      } = processUpdateQueue(baseState, baseQueue, renderLane);
+      hook.memoizedState = memoizedState;
+      hook.baseQueue = newBaseQueue;
+      hook.baseState = newBaseState;
+    }
   }
   
   return [hook.memoizedState, queue.dispatch as Dispatch<State>];
@@ -212,7 +242,9 @@ function updateWorkInProgressHook(): Hook {
   const newHook: Hook = {
     memoizedState: currentHook.memoizedState,
     updateQueue: currentHook.updateQueue,
-    next: null
+    next: null,
+    baseQueue: currentHook.baseQueue,
+    baseState: currentHook.baseState
   };
   if (workInProgressHook === null) {
     if(currentlyRenderingFiber === null) {
@@ -269,7 +301,9 @@ function mountWorkInProgressHook(): Hook {
   const hook: Hook = {  // 创建hook数据
     memoizedState: null,
     updateQueue: null,
-    next: null
+    next: null,
+    baseQueue: null,
+    baseState: null,
   };
   if (workInProgressHook === null) {  // mount阶段，且为第一个hook
     if(currentlyRenderingFiber === null) {  // 进入到mount阶段，执行了mountState函数，但是currentlyRenderingFiber为null；代表没有在函数组件内调用hook

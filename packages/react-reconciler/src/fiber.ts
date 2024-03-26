@@ -5,6 +5,7 @@ import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig'; // 在tsconfig中进行了配置，这里不用写死路径
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
+import { CallbackNode } from 'scheduler';
 
 export class FiberNode {
   type: any;
@@ -72,6 +73,9 @@ export class FiberRootNode {
   pendingLanes: Lanes;  // 代表所有未被消费的lane的集合
   finishedLane: Lane;  // 代表本次更新消费的lane
   pendingPassiveEffects: PendingPassiveEffects; // 用于收集effect中的回调
+  // 调度器相关
+  callbackNode: CallbackNode | null;
+  callbackPriority: Lane;
 
   constructor(container: Container, hostRootFiber: FiberNode) {
     this.container = container;
@@ -85,6 +89,9 @@ export class FiberRootNode {
       unmount: [],
       update: []
     };
+
+    this.callbackNode = null;
+    this.callbackPriority = NoLane;
   }
 
 }
