@@ -6,6 +6,7 @@ import { UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate } from "./u
 import { ReactElementType } from "shared/ReactTypes";
 import { scheduleUpdateOnFiber } from "./workLoop";
 import { requestUpdateLane } from "./fiberLanes";
+import { unstable_ImmediatePriority, unstable_runWithPriority } from "scheduler";
 
 
 export function createContainer(container: Container) { // 执行ReactDOM.createRoot()时，就会执行该函数
@@ -18,15 +19,18 @@ export function createContainer(container: Container) { // 执行ReactDOM.create
 }
 
 export function updateContainer(element: ReactElementType | null, root: FiberRootNode) {  // 接着执行ReactDOM.createRoot().render()的render方法时，就会执行该函数
-  const hostRootFiber = root.current;
+  // 默认启用同步更新
+  unstable_runWithPriority(unstable_ImmediatePriority, () => {  // 使用同步优先级
+    const hostRootFiber = root.current;
+    
+    const lane = requestUpdateLane(); // 这里获取到的lane就是同步优先级的lane
   
-  const lane = requestUpdateLane();
-
-  // 首屏渲染出发更新
-  const update = createUpdate<ReactElementType | null>(element, lane);
-  enqueueUpdate(hostRootFiber.updateQueue as UpdateQueue<ReactElementType | null>, update);
-
-  scheduleUpdateOnFiber(hostRootFiber, lane);
+    // 首屏渲染触发同步更新
+    const update = createUpdate<ReactElementType | null>(element, lane);
+    enqueueUpdate(hostRootFiber.updateQueue as UpdateQueue<ReactElementType | null>, update);
+  
+    scheduleUpdateOnFiber(hostRootFiber, lane);
+  });
 
   return element;
 }

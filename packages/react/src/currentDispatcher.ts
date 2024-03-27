@@ -5,6 +5,7 @@ import { Action } from "shared/ReactTypes";
 export interface Dispatcher {
   useState: <T>(initialState: (() => T) | T) => [T, Dispatch<T>]; // initialState接收函数或者参数T，返回一个数组
   useEffect: (callback: () => void | void, deps: any[] | void) => void;
+  useTransition: () => [boolean, (callback: () => void) => void];
 }
 
 export type Dispatch<State> = (action: Action<State>) => void;

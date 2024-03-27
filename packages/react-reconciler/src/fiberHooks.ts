@@ -1,6 +1,7 @@
 import internals from "shared/internals";
 import { Action } from "shared/ReactTypes";
 import { Dispatch, Dispatcher } from "react/src/currentDispatcher";
+import ReactCurrentBatchConfig from "react/src/currentBatchConfig";
 import { FiberNode } from "./fiber";
 import { Update, UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate, processUpdateQueue } from "./updateQueue";
 import { scheduleUpdateOnFiber } from "./workLoop";
@@ -75,11 +76,13 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
 const HooksDispatcherOnMount: Dispatcher = {
   useState: mountState,
   useEffect: mountEffect,
+  useTransition: mountTransition,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
   useState: updateState,
   useEffect: updateEffect,
+  useTransition: updateTransition,
 };
 
 function updateEffect(create: EffectCallBack | void, deps: EffectDeps | void) {
@@ -184,8 +187,6 @@ function updateState<State>(): [State, Dispatch<State>] {
   const current = currentHook as Hook;
   let baseQueue = current.baseQueue;
 
-
-  
   if (pending !== null) {
     // pending和baseQueue的update保存在current中
     if (baseQueue !== null) { // baseQueue存在
@@ -201,17 +202,17 @@ function updateState<State>(): [State, Dispatch<State>] {
     baseQueue = pending;
     current.baseQueue = pending;  // 保存在current中
     queue.shared.pending = null;
+  }
 
-    if (baseQueue !== null) {
-      const { 
-        memoizedState, 
-        baseQueue: newBaseQueue, 
-        baseState: newBaseState 
-      } = processUpdateQueue(baseState, baseQueue, renderLane);
-      hook.memoizedState = memoizedState;
-      hook.baseQueue = newBaseQueue;
-      hook.baseState = newBaseState;
-    }
+  if (baseQueue !== null) {
+    const { 
+      memoizedState, 
+      baseQueue: newBaseQueue, 
+      baseState: newBaseState 
+    } = processUpdateQueue(baseState, baseQueue, renderLane);
+    hook.memoizedState = memoizedState;
+    hook.baseQueue = newBaseQueue;
+    hook.baseState = newBaseState;
   }
   
   return [hook.memoizedState, queue.dispatch as Dispatch<State>];
@@ -276,6 +277,7 @@ function mountState<State>(
   const queue = createUpdateQueue<State>();
   hook.updateQueue = queue;
   hook.memoizedState = memoizedState; // 将initialState保存在hook.memoizedState中
+  hook.baseState = memoizedState; // 之前遗留的bug
   
   // 用bind的原因：比如说在App组件中定义一个状态，dispatch方法名为setNum，这个setNum可以脱离函数组件使用（比如说绑在window对象上，然后可以在控制台或组件外部使用），也是可以触发函数组件的更新的
   // 因为在dispatchSetState方法中，已经保存了对应的fiber节点，所以可以用bind来调用实现
@@ -284,6 +286,37 @@ function mountState<State>(
   queue.dispatch = dispatch;
   return [memoizedState, dispatch];
 };
+
+function mountTransition(): [boolean, (callback: () => void) => void] {  // 第一个返回值：表示是否在pending中；第二个返回值：startTransition，是一个函数，接收一个回调函数
+  const [isPending, setPending] = mountState(false);
+  const hook = mountWorkInProgressHook();
+
+  const start = startTransition.bind(null, setPending);
+  hook.memoizedState = start;
+
+  return [isPending, start];
+}
+
+function updateTransition(): [boolean, (callback: () => void) => void] {
+  const [isPending] = updateState();
+  const hook = updateWorkInProgressHook();
+  const start = hook.memoizedState;
+
+  return [isPending as boolean, start];
+}
+
+function startTransition(setPending: Dispatch<boolean>, callback: () => void) {
+  setPending(true); // 高优先级的同步更新
+
+  // 将优先级(调度器的优先级)改为TransitionLane
+  const prevTransition = ReactCurrentBatchConfig.transition;
+  ReactCurrentBatchConfig.transition = 1;  // 设为1，改变优先级，表示当前进入了transition
+
+  callback();
+  setPending(false);
+
+  ReactCurrentBatchConfig.transition = prevTransition;
+}
 
 function dispatchSetState<State>(
   fiber: FiberNode, 

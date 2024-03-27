@@ -1,4 +1,5 @@
 import { unstable_IdlePriority, unstable_ImmediatePriority, unstable_NormalPriority, unstable_UserBlockingPriority, unstable_getCurrentPriorityLevel } from "scheduler";
+import ReactCurrentBatchConfig from "react/src/currentBatchConfig";
 import { FiberRootNode } from "./fiber";
 
 // Lane模型，所谓的Lane 是一个二进制的数字
@@ -6,10 +7,11 @@ export type Lane = number;  // 作为update的优先级
 export type Lanes = number; // 代表lane的集合
 
 // 数字越小，优先级越高（0除外，0没有优先级）
-export const SyncLane = 0b0001; // 同步优先级
-export const InputContinuousLane = 0b0010; // 比如：连续的输入 
-export const DefaultLane = 0b0100; // 默认的优先级
-export const IdleLane = 0b1000; // 空闲时的优先级
+export const SyncLane = 0b00001; // 同步优先级
+export const InputContinuousLane = 0b00010; // 比如：连续的输入 
+export const DefaultLane = 0b00100; // 默认的优先级
+export const IdleLane = 0b01000; // 空闲时的优先级
+export const TransitionLane = 0b10000; // useTransition的优先级
 export const NoLane = 0b0000; // 没有优先级
 export const NoLanes = 0b0000; // 没有优先级
 
@@ -18,6 +20,12 @@ export function mergeLanes(laneA: Lane, laneB: Lane): Lanes {
 }
 
 export function requestUpdateLane() {
+  // 新增一个transition的判断
+  const isTransition = ReactCurrentBatchConfig.transition !== null;
+  if (isTransition) { // 如果当前存在transition的标记，那么就直接返回transition对应的lane
+    return TransitionLane;
+  }
+
   // 从上下文环境中获取scheduler优先级
   // 与triggerEventFlow函数衔接上了
   const currentSchedulerPriority = unstable_getCurrentPriorityLevel();
