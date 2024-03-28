@@ -1,6 +1,6 @@
 import { Container, Instance, appendChildToContainer, commitUpdate, insertChildToContainer, removeChild } from "hostConfig";
 import { FiberNode, FiberRootNode, PendingPassiveEffects } from "./fiber";
-import { ChildDeletion, Flags, MutationMask, NoFlags, PassiveEffect, PassiveMask, Placement, Update } from "./fiberFlags";
+import { ChildDeletion, Flags, LayoutMask, MutationMask, NoFlags, PassiveEffect, PassiveMask, Placement, Ref, Update } from "./fiberFlags";
 import { FunctionComponent, HostComponent, HostRoot, HostText } from "./workTags";
 import { Effect, FCUpdateQueue } from "./fiberHooks";
 import { HookHasEffect } from "./hookEffectTag";
@@ -8,34 +8,41 @@ import { HookHasEffect } from "./hookEffectTag";
 // nextEffect指向下一个需要执行的effect
 let nextEffect: FiberNode | null = null;
 
-export const commitMutationEffect = (finishedWork: FiberNode, root: FiberRootNode) => {
-  nextEffect = finishedWork;
+// layout阶段 和 mutation阶段
+export const commitEffects = (
+  phrase: 'mutation' | 'layout', 
+  mask: Flags, 
+  callback: (fiber: FiberNode, root: FiberRootNode) => void
+  ) => {
+  return (finishedWork: FiberNode, root: FiberRootNode) => {
+    nextEffect = finishedWork;
 
-  while (nextEffect !== null) { // 向下遍历
-    const child: FiberNode | null = nextEffect.child;
+    while (nextEffect !== null) { // 向下遍历
+      const child: FiberNode | null = nextEffect.child;
 
-    // subtreeFlags包含了MutationMask和PassiveMask中需要执行的操作，并且child不为空
-    if ((nextEffect.subtreeFlags & (MutationMask | PassiveMask)) !== NoFlags &&child !== null) {
-      nextEffect = child;
-    } else {
-      // 要么已经找到底了，要么就是不包含MutationMask中需要执行的操作；但是可能包含flags
-      up: while (nextEffect !== null) {
-        commitMutationEffectOnFiber(nextEffect, root);
-        const sibling: FiberNode | null = nextEffect.sibling;
+      // subtreeFlags包含了MutationMask和PassiveMask中需要执行的操作，并且child不为空
+      if ((nextEffect.subtreeFlags & mask) !== NoFlags &&child !== null) {
+        nextEffect = child;
+      } else {
+        // 要么已经找到底了，要么就是不包含MutationMask中需要执行的操作；但是可能包含flags
+        up: while (nextEffect !== null) {
+          callback(nextEffect, root);
+          const sibling: FiberNode | null = nextEffect.sibling;
 
-        if (sibling !== null) { // 继续遍历sibling
-          nextEffect = sibling;
-          break up;
+          if (sibling !== null) { // 继续遍历sibling
+            nextEffect = sibling;
+            break up;
+          }
+          // 向上遍历
+          nextEffect = nextEffect.return;
         }
-        // 向上遍历
-        nextEffect = nextEffect.return;
       }
     }
   }
 }
 
 const commitMutationEffectOnFiber = (finishedWork: FiberNode, root: FiberRootNode) => {  // 当前的finishedWork就是真正存在flags的fiber节点  
-  const flags = finishedWork.flags;
+  const { flags, tag } = finishedWork;
 
   if ((flags & Placement) !== NoFlags) {  // 存在Placement操作
     commitPlacement(finishedWork);
@@ -64,7 +71,56 @@ const commitMutationEffectOnFiber = (finishedWork: FiberNode, root: FiberRootNod
     commitPassiveEffect(finishedWork, root, 'update');
     finishedWork.flags &= ~PassiveEffect;
   }
+  // ref 
+  if ((flags & Ref) !== NoFlags && tag === HostComponent) {
+    // 解绑ref
+    safelyDetachRef(finishedWork);
+  }
 }
+
+// 解绑之前的ref
+function safelyDetachRef(current: FiberNode) {
+  const ref = current.ref;
+
+  if (ref !== null) {
+    // ref现在存在两种写法eg： 1. <div ref={dom => console.log(dom)}></div>  2. <div ref={domRef}></div>
+    // 判断ref的类型是函数还是对象形式
+    if (typeof ref === 'function') { // 第一种写法，即函数类型
+      ref(null);
+    } else {  // 第二种写法，即对象形式
+      ref.current = null;
+    }
+  }
+}
+
+const commitLayoutEffectOnFiber = (finishedWork: FiberNode) => {
+  const { flags, tag } = finishedWork;
+  
+  if ((flags & Ref) !== NoFlags && tag == HostComponent) {  // 绑定新的ref
+    safelyAttachRef(finishedWork);
+    finishedWork.flags &= ~Ref;
+  }
+}
+
+// 绑定新的ref
+function safelyAttachRef(fiber: FiberNode) {
+  const ref = fiber.ref;
+  if (ref !== null) {
+    // ref现在存在两种写法eg： 1. <div ref={dom => console.log(dom)}></div>  2. <div ref={domRef}></div>
+    // 判断ref的类型是函数还是对象形式
+    const instance = fiber.stateNode;
+    if (typeof ref === 'function') { // 第一种写法，即函数类型
+      ref(instance);
+    } else {  // 第二种写法，即对象形式
+      ref.current = instance;
+    }
+  }
+}
+
+// mutation阶段
+export const commitMutationEffect = commitEffects('mutation', MutationMask | PassiveMask, commitMutationEffectOnFiber);
+// layout阶段
+export const commitLayoutEffect = commitEffects('layout', LayoutMask, commitLayoutEffectOnFiber);
 
 // 收集回调的方法
 function commitPassiveEffect(fiber: FiberNode, root: FiberRootNode, type: keyof PendingPassiveEffects) {  // 一共有两种类型的回调需要收集：create回调、destroy回调
@@ -174,7 +230,8 @@ function commitDeletion(childToDelete: FiberNode, root: FiberRootNode) {
     switch (unmountFiber.tag) {
       case HostComponent:
         recordHostChildrenToDelete(rootChildrenToDelete, unmountFiber);
-        // TODO 解绑ref
+        // 解绑ref
+        safelyDetachRef(unmountFiber);
         return;
 
       case HostText:

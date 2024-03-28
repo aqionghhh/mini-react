@@ -3,10 +3,15 @@
 import { Container, Instance, appendInitialChild, createInstance, createTextInstance } from "hostConfig";
 import { FiberNode } from "./fiber";
 import { Fragment, FunctionComponent, HostComponent, HostRoot, HostText } from "./workTags";
-import { NoFlags, Update } from "./fiberFlags";
+import { NoFlags, Ref, Update } from "./fiberFlags";
 
 function markUpdate(fiber: FiberNode) {
   fiber.flags |= Update;
+}
+
+// 标记ref的方法
+function markRef(fiber: FiberNode) {
+  fiber.flags |= Ref;
 }
 
 export const completeWork = (wip: FiberNode) => {
@@ -20,6 +25,10 @@ export const completeWork = (wip: FiberNode) => {
         // 2. 发生变化，需要打上一个Update flag
 
         markUpdate(wip);  // 直接标记需要update（判断props变化有点繁琐，这里没有判断props变化）
+        // 标记ref
+        if (current.ref !== wip.ref) {
+          markRef(wip);
+        }
       } else {  // mount阶段
         // 构建离屏DOM树
         // 1. 构建DOM
@@ -27,6 +36,10 @@ export const completeWork = (wip: FiberNode) => {
         // 2. 将DOM插入到DOM树中
         appendAllChildren(instance, wip);
         wip.stateNode = instance;
+        // 标记ref
+        if (wip.ref !== null) {
+          markRef(wip);
+        }
       }
       bubbleProperties(wip);
     return null;

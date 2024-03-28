@@ -7,6 +7,7 @@ import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment } from "
 import { mountChildFibers, reconcileChildFibers } from "./childFibers";
 import { renderWithHooks } from "./fiberHooks";
 import { Lane } from "./fiberLanes";
+import { Ref } from "./fiberFlags";
 
 // 比较，然后生成子fiberNode并返回
 export const beginWork = (wip: FiberNode, renderLane: Lane) => {
@@ -65,6 +66,7 @@ function updateHostRoot(wip: FiberNode, renderLane: Lane) { // renderLane代表�
 function updateHostComponent(wip: FiberNode) {
   const nextProps = wip.pendingProps; // 拿到子节点
   const nextChildren = nextProps.children;
+  markRef(wip.alternate, wip);  // ref
   reconcilerChildren(wip, nextChildren);
   return wip.child;
 }
@@ -79,5 +81,15 @@ function reconcilerChildren(wip: FiberNode, children?: ReactElementType) {
   } else {  // 只有在mount流程时会涉及大量的Placement操作，所以需要进行性能优化
     // mount流程（不希望追踪副作用）
     wip.child = mountChildFibers(wip, null, children);
+  }
+}
+
+// 标记ref的方法
+function markRef(current: FiberNode | null, workInProgress: FiberNode) {
+  const ref = workInProgress.ref;
+  
+  if ((current === null && ref !== null || (current !== null && current.ref !== ref))) { // mount时存在ref；或者update时，ref的引用存在变化
+    // 对ref进行标记
+    workInProgress.flags |= Ref;
   }
 }

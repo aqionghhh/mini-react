@@ -1,7 +1,7 @@
 // 完整的工作循环
 import { scheduleMicroTask } from "hostConfig";
 import { beginWork } from "./beginWork";
-import { commitHookEffectListCreate, commitHookEffectListDestroy, commitHookEffectListUnmount, commitMutationEffect } from "./commitWorks";
+import { commitHookEffectListCreate, commitHookEffectListDestroy, commitHookEffectListUnmount, commitLayoutEffect, commitMutationEffect } from "./commitWorks";
 import { completeWork } from "./completeWork";
 import { FiberNode, FiberRootNode, PendingPassiveEffects, createWorkInProgress } from "./fiber";
 import { MutationMask, NoFlags, PassiveMask } from "./fiberFlags";
@@ -268,6 +268,8 @@ function commitRoot(root: FiberRootNode) {
     root.current = finishedWork;  // fiber树的切换（fiber树的切换时机发生在mutation执行完成和layout开始执行之前）
 
     // layout
+    // 此时fiber树已经完成切换，wip fiber已经变成了current fiber
+    commitLayoutEffect(finishedWork, root);
     
   } else {
     root.current = finishedWork;  // fiber树的切换（即使没有发生更新，也要执行切换操作）

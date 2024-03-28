@@ -11,15 +11,21 @@ export const useState: Dispatcher['useState'] = (initialState) => {
 }
 
 export const useEffect: Dispatcher['useEffect'] = (create, deps) => {
-  // 获取Dispatcher中的useState
+  // 获取Dispatcher中的useEffect
   const dispatcher = resolveDispatcher();
   return dispatcher.useEffect(create, deps);
 }
 
 export const useTransition: Dispatcher['useTransition'] = () => {
-  // 获取Dispatcher中的useState
+  // 获取Dispatcher中的useTransition
   const dispatcher = resolveDispatcher();
   return dispatcher.useTransition();
+}
+
+export const useRef: Dispatcher['useRef'] = (initialValue) => {
+  // 获取Dispatcher中的useRef
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useRef(initialValue);
 }
 
 // 内部的数据共享层（变量名字可以自己取）
