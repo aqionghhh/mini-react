@@ -22,6 +22,6 @@ export type ReactProviderType<T> = {
 
 export type ReactContext<T> = {
   $$typeof: symbol | number;
-  Provide: ReactProviderType<T> | null; // 对应了context.Provide
+  Provider: ReactProviderType<T> | null; // 对应了context.Provide
   _currentValue: T  // 保存context当前的值
 };

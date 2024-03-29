@@ -62,47 +62,14 @@ export const createElement = (type: ElementType, config: any, ...maybeChildren: 
   return ReactElement(type, key, ref, props);
 };
 
-export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
-	const props: Props = {};
+export const jsx = (type: ElementType, config: any, maybeKey: any) => {
 	let key: Key = null;
+	const props: Props = {};
 	let ref: Ref = null;
 
-	for (const prop in config) {
-		const val = config[prop];
-		if (prop === 'key') { // 感觉这里不需要这个if判断？？？
-			if (val !== undefined) {
-				key = '' + val;
-			}
-			continue;
-		}
-		if (prop === 'ref') {
-			if (val !== undefined) {
-				ref = val;
-			}
-			continue;
-		}
-		if ({}.hasOwnProperty.call(config, prop)) {
-			props[prop] = val;
-		}
+	if (maybeKey !== undefined) {
+		key = '' + maybeKey;
 	}
-
-	const maybeChildrenLength = maybeChildren.length;
-  if (maybeChildrenLength) {  // 存在多余的children
-    // 存在两种情况：[child]  [child, child, child]
-    if (maybeChildrenLength === 1) {  // 长度为1时，就可以直接赋值
-      props.children = maybeChildren[0];
-    } else {
-      props.children = maybeChildren;
-    }
-  }
-
-	return ReactElement(type, key, ref, props);
-};
-
-export const jsxDEV = (type: ElementType, config: any) => {
-	const props: Props = {};
-	let key: Key = null;
-	let ref: Ref = null;
 
 	for (const prop in config) {
 		const val = config[prop];
@@ -125,3 +92,5 @@ export const jsxDEV = (type: ElementType, config: any) => {
 
 	return ReactElement(type, key, ref, props);
 };
+
+export const jsxDEV = jsx;
