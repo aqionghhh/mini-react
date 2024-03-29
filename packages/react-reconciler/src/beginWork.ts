@@ -1,13 +1,13 @@
 // 递归中的递阶段
 
 import { ReactElementType } from "shared/ReactTypes";
-import { FiberNode } from "./fiber";
+import { FiberNode, OffscreenProps, createFiberFromFragment, createFiberFromOffscreen, createWorkInProgress } from "./fiber";
 import { UpdateQueue, processUpdateQueue } from "./updateQueue";
-import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment, ContextProvider } from "./workTags";
+import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment, ContextProvider, SuspenseComponent, OffscreenComponent } from "./workTags";
 import { mountChildFibers, reconcileChildFibers } from "./childFibers";
 import { renderWithHooks } from "./fiberHooks";
 import { Lane } from "./fiberLanes";
-import { Ref } from "./fiberFlags";
+import { ChildDeletion, Placement, Ref } from "./fiberFlags";
 import { pushProvider } from "./fiberContext";
 
 // 比较，然后生成子fiberNode并返回
@@ -28,7 +28,10 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
       return updateFragment(wip);
     case ContextProvider:
       return updateContextProvider(wip);
-      
+    case SuspenseComponent:
+      return updateSuspenseComponent(wip);
+    case OffscreenComponent:
+      return updateOffscreenComponent(wip);
     default:
       if (__DEV__) {
         console.warn('beginWork未实现的类型');
@@ -36,6 +39,144 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
       break;
   }
   return null;
+}
+
+function updateSuspenseComponent(wip: FiberNode) {
+  const current = wip.alternate;
+  const nextProps = wip.pendingProps;
+
+  // 需要判断当前是正常流程还是挂起流程
+  let showFallback = false; // 是否展示fallback
+  const didSuspend = true; // 表示当前是否为挂起状态（先假定为true）
+
+  if (didSuspend) { // 当前为挂起状态 
+    showFallback = true;
+
+  }
+
+  const nextPrimaryChildren = nextProps.children; // 对应的offscreen
+  const nextFallbackChildren = nextProps.fallback;  // 对应的fallback
+
+  if (current === null) { // mount流程
+    if (showFallback) { // mount的挂起流程
+      return mountSuspenseFallbackChildren(wip, nextPrimaryChildren, nextFallbackChildren);
+    } else { // mount的正常流程
+      return mountSuspensePrimaryChildren(wip, nextPrimaryChildren);
+    }
+  } else {
+    if (showFallback) { // update的挂起流程
+      return updateSuspenseFallbackChildren(wip, nextPrimaryChildren, nextFallbackChildren);
+    } else {  // update的正常流程
+      return updateSuspensePrimaryChildren(wip, nextPrimaryChildren);
+    }
+  }
+}
+
+// update时的正常流程
+function updateSuspensePrimaryChildren(wip: FiberNode, primaryChildren: any) {
+  const current = wip.alternate as FiberNode;
+  const currentPrimaryChildFragment = current.child as FiberNode;
+  const currentFallbackChildFragment: FiberNode | null = currentPrimaryChildFragment.sibling;
+
+  const primaryChildProps: OffscreenProps = {
+    mode: 'visible',
+    children: primaryChildren
+  }; // offscreen对应的props
+  
+  const primaryChildFragment = createWorkInProgress(currentPrimaryChildFragment, primaryChildProps); // 复用primaryChildFragment
+
+  primaryChildFragment.return = wip;
+  primaryChildFragment.sibling = null;
+  wip.child = primaryChildFragment;
+
+  if (currentFallbackChildFragment !== null) {  // 移除fallback
+    const deletions = wip.deletions;
+    if (deletions === null) {
+      wip.deletions = [currentFallbackChildFragment];
+      wip.flags |= ChildDeletion;
+    } else {
+      deletions.push(currentFallbackChildFragment);
+    }
+  }
+
+  return primaryChildFragment;
+}
+
+// update时的挂起流程
+function updateSuspenseFallbackChildren(wip: FiberNode, primaryChildren: any, fallbackChildren: any) {
+  const current = wip.alternate as FiberNode;
+  const currentPrimaryChildFragment = current.child as FiberNode;
+  const currentFallbackChildFragment: FiberNode | null = currentPrimaryChildFragment.sibling;
+
+  const primaryChildProps: OffscreenProps = {
+    mode: 'hidden',
+    children: primaryChildren
+  }; // offscreen对应的props
+  
+  const primaryChildFragment = createWorkInProgress(currentPrimaryChildFragment, primaryChildProps); // 复用primaryChildFragment
+  let fallbackChildFragment
+  if (currentFallbackChildFragment !== null) {  // 之前创建过了fallbackChildFragment，可以复用
+    fallbackChildFragment = createWorkInProgress(currentFallbackChildFragment, fallbackChildren); // 复用fallbackChildFragment
+  } else {
+    fallbackChildFragment = createFiberFromFragment(fallbackChildren, null); // 创建fallback对应的fiber
+    fallbackChildFragment.flags |= Placement;
+  }
+
+  primaryChildFragment.return = wip;
+  fallbackChildFragment.return = wip;
+  primaryChildFragment.sibling = fallbackChildFragment;
+  wip.child = primaryChildFragment;
+
+  return fallbackChildFragment;
+}
+
+// mount时的正常流程
+function mountSuspensePrimaryChildren(wip: FiberNode, primaryChildren: any) {
+  const primaryChildProps: OffscreenProps = {
+    mode: 'visible',
+    children: primaryChildren
+  }; // offscreen对应的props
+  
+  const primaryChildFragment = createFiberFromOffscreen(primaryChildProps); // 创建Offscreen对应的fiber
+  // 为什么这里不需要创建fallbackChildFragment：因为不知道何时会渲染该 Suspense对应的fallback
+  // 所以在渲染fallback之前没有必要提前创建fallbackChildFragment的fiber，在渲染Fragment的时候创建fallbackChildFragment对应的fiber就行了
+
+  wip.child = primaryChildFragment;
+  primaryChildFragment.return = wip;
+
+  return primaryChildFragment;
+}
+
+// mount时的挂起流程
+function mountSuspenseFallbackChildren(wip: FiberNode, primaryChildren: any, fallbackChildren: any) {
+  // 虽然返回的是Fragment的fallback，但是还需要创建offscreen
+  const primaryChildProps: OffscreenProps = {
+    mode: 'hidden',
+    children: primaryChildren
+  }; // offscreen对应的props
+  
+  const primaryChildFragment = createFiberFromOffscreen(primaryChildProps); // 创建Offscreen对应的fiber
+  const fallbackChildFragment = createFiberFromFragment(fallbackChildren, null); // 创建fallback对应的fiber
+
+  // 需要考虑下什么情况会进入这个函数：从正常状态进入到挂起状态时
+  // 因为对应的Fragment需要挂载，但是其shouldTrackEffects始终为false，且父组件Suspense已经挂载了不可能为null；
+  // 所以需要手动标记Placement，插入对应的dom，否则切换时，fallback的dom是不会被插入的
+  fallbackChildFragment.flags |= Placement;
+
+  primaryChildFragment.return = wip;
+  fallbackChildFragment.return = wip;
+  primaryChildFragment.sibling = fallbackChildFragment;
+  wip.child = primaryChildFragment;
+
+  return fallbackChildFragment;
+}
+
+function updateOffscreenComponent(wip: FiberNode) {
+  const nextProps = wip.pendingProps;
+  const nextChildren = nextProps.children;
+
+  reconcilerChildren(wip, nextChildren);
+  return wip.child;
 }
 
 function updateContextProvider(wip: FiberNode) {

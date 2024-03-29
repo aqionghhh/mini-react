@@ -1,7 +1,7 @@
-import { Container, Instance, appendChildToContainer, commitUpdate, insertChildToContainer, removeChild } from "hostConfig";
+import { Container, Instance, appendChildToContainer, commitUpdate, hideInstance, hideTextInstance, insertChildToContainer, removeChild, unhideInstance, unhideTextInstance } from "hostConfig";
 import { FiberNode, FiberRootNode, PendingPassiveEffects } from "./fiber";
-import { ChildDeletion, Flags, LayoutMask, MutationMask, NoFlags, PassiveEffect, PassiveMask, Placement, Ref, Update } from "./fiberFlags";
-import { FunctionComponent, HostComponent, HostRoot, HostText } from "./workTags";
+import { ChildDeletion, Flags, LayoutMask, MutationMask, NoFlags, PassiveEffect, PassiveMask, Placement, Ref, Update, Visibility } from "./fiberFlags";
+import { FunctionComponent, HostComponent, HostRoot, HostText, OffscreenComponent } from "./workTags";
 import { Effect, FCUpdateQueue } from "./fiberHooks";
 import { HookHasEffect } from "./hookEffectTag";
 
@@ -75,6 +75,100 @@ const commitMutationEffectOnFiber = (finishedWork: FiberNode, root: FiberRootNod
   if ((flags & Ref) !== NoFlags && tag === HostComponent) {
     // 解绑ref
     safelyDetachRef(finishedWork);
+  }
+
+  // 处理Visibility effectTag
+  if ((flags & Visibility ) !== NoFlags && tag === OffscreenComponent) {
+    const isHidden = finishedWork.pendingProps.mode === 'hidden';
+    // 找到所有顶层的子树Host节点，并标记display: none
+    // eg：
+    // function Cpn() {
+    //   return (
+    //     <p>123</p>
+    //   )
+    // }
+    
+    // 情况1，一个host节点：
+    // <Suspense fallback={<div>loading...</div>}>
+    //     <Cpn/>
+    // </Suspense>
+    
+    // 情况2，多个host节点：
+    // <Suspense fallback={<div>loading...</div>}>
+    //     <Cpn/>
+    //     <div>
+    //         <p>你好</p>
+    //     </div>
+    //      123
+    // </Suspense>
+    hideOrUnhideAllChildren(finishedWork, isHidden);
+  }
+}
+
+// 显示或隐藏所有的子节点
+function hideOrUnhideAllChildren(finishedWork: FiberNode, isHidden: boolean) {
+  // 找到所有子树的顶层Host节点，并标记显示或隐藏
+  findHostSubtreeRoot(finishedWork, (hostRoot) => {
+    const instance = hostRoot.stateNode;
+    if (hostRoot.tag === HostComponent) {
+      isHidden ? hideInstance(instance) : unhideInstance(instance);
+    } else if (hostRoot.tag === HostText) {
+      isHidden ? hideTextInstance(instance) : unhideTextInstance(instance, hostRoot.memoizedProps.content);
+    }
+  })
+}
+
+// 找到所有子树的顶层Host节点
+function findHostSubtreeRoot(finishedWork: FiberNode, callback: (hostSubtreeRoot: FiberNode) => void) {
+  let node = finishedWork;
+  let hostSubtreeRoot = null; // 表示顶层的Host类型节点
+
+
+  while (true) {
+    // 处理逻辑
+    if (node.tag === HostComponent) {
+      if (hostSubtreeRoot === null) { // 还未找到当前子树顶层的Host类型节点
+        hostSubtreeRoot = node;
+        callback(node);
+      }
+    } else if (node.tag === HostText) {
+      if (hostSubtreeRoot === null) { // 还未找到当前子树顶层的Host类型节点
+        // hostSubtreeRoot = node;  // 为什么不需要这行：HostText没有子孙节点，不可能继续往下找了，所以没有必要做标记
+        callback(node);
+      }
+    } else if (node.tag === OffscreenComponent && node.pendingProps.mode === 'hidden' && node !== finishedWork) {
+      // 表示当前在处理Suspense，但是Suspense内部又有一个Suspense，即offscreenComponent嵌套offscreenComponent的情况
+      // 嵌套的不需要处理；嵌套的offscreenComponent会由它的Suspense来处理
+      // 什么都不做
+    }
+    
+    // 深度优先算法
+    else if (node.child !== null) {
+      node.child.return = node;
+      node = node.child;
+      continue;
+    }
+
+    if (node === finishedWork) {  // 终止条件
+      return;
+    }
+
+    while (node.sibling === null) {
+      if (node.return === null || node.return === finishedWork) { // 找到了根节点 || 找到了出发的fiber节点
+        return;
+      }
+
+      if (hostSubtreeRoot === node) { // 离开了当前的顶层Host节点
+        hostSubtreeRoot = null;
+      }
+      node = node.return;
+    }
+
+    if (hostSubtreeRoot === node) { // 离开了当前的顶层Host节点
+      hostSubtreeRoot = null;
+    }
+    node.sibling.return = node.return;
+    node = node.sibling;
   }
 }
 

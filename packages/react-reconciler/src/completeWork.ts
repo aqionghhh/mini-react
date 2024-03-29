@@ -2,8 +2,8 @@
 
 import { Container, Instance, appendInitialChild, createInstance, createTextInstance } from "hostConfig";
 import { FiberNode } from "./fiber";
-import { ContextProvider, Fragment, FunctionComponent, HostComponent, HostRoot, HostText } from "./workTags";
-import { NoFlags, Ref, Update } from "./fiberFlags";
+import { ContextProvider, Fragment, FunctionComponent, HostComponent, HostRoot, HostText, OffscreenComponent, SuspenseComponent } from "./workTags";
+import { NoFlags, Ref, Update, Visibility } from "./fiberFlags";
 import { popProvider } from "./fiberContext";
 
 function markUpdate(fiber: FiberNode) {
@@ -64,12 +64,32 @@ export const completeWork = (wip: FiberNode) => {
     case HostRoot:
     case FunctionComponent:
     case Fragment:
+    case OffscreenComponent:
       bubbleProperties(wip);
       return null;
     case ContextProvider:
       const context = wip.type._context;
       popProvider(context);
       bubbleProperties(wip);
+      return null;
+    // 在SuspenseComponent中对比current Offscreen mode与wip Offscreen mode
+    case SuspenseComponent: 
+      // 不使用OffscreenComponent比较的原因：在fallback展示的情况下，无法进入offscreen的completeWork阶段（offscreen的fiber树存在，但是不会进入）
+      // 因为fallback的return是fragment、fragment的return是suspense，按照深度优先遍历，进入不到offscreen
+      const offscreenFiber = wip.child as FiberNode; 
+      const isHidden = offscreenFiber.pendingProps.mode === 'hidden'; // 为什么这里用的pendingProps：
+      const currentOffscreenFiber = offscreenFiber.alternate;
+      if (currentOffscreenFiber !== null) { // update流程
+        const wasHidden = currentOffscreenFiber.pendingProps.mode === 'hidden'; // 当前是否为hidden
+        if (isHidden !== wasHidden) { // 变化了
+          offscreenFiber.flags |= Visibility;
+          bubbleProperties(offscreenFiber); // offscreenFiber是SuspenseComponent的子组件，所以将offscreenFiber冒泡到SuspenseComponent对应的fiber
+        }
+      } else if (isHidden) {  // mount阶段的isHidden
+        offscreenFiber.flags |= Visibility;
+        bubbleProperties(offscreenFiber)
+      }
+      bubbleProperties(wip);  // SuspenseComponent自己也需要冒泡一下
       return null;
     default:
       if (__DEV__) {

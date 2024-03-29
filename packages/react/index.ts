@@ -2,7 +2,7 @@
 import currentDispatcher, { Dispatcher, resolveDispatcher } from './src/currentDispatcher';
 import ReactCurrentBatchConfig from './src/currentBatchConfig';
 import { jsxDEV, jsx, isValidElement as isValidElementFn } from './src/jsx';
-export { REACT_FRAGMENT_TYPE as Fragment } from 'shared/ReactSymbols';
+export { REACT_FRAGMENT_TYPE as Fragment, REACT_SUSPENSE_TYPE as Suspense } from 'shared/ReactSymbols';
 export { createContext } from './src/context';
 
 // 使用的hooks都是从React包中暴露出去的

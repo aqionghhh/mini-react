@@ -1,13 +1,18 @@
 // 用于存放fiberNode数据结构
 import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
-import { ContextProvider, Fragment, FunctionComponent, HostComponent, WorkTag } from './workTags';
+import { ContextProvider, Fragment, FunctionComponent, HostComponent, OffscreenComponent, SuspenseComponent, WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig'; // 在tsconfig中进行了配置，这里不用写死路径
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
-import { REACT_PROVIDER_TYPE } from 'shared/ReactSymbols';
+import { REACT_PROVIDER_TYPE, REACT_SUSPENSE_TYPE } from 'shared/ReactSymbols';
 
+
+export interface OffscreenProps {
+  mode: 'visible' | 'hidden';
+  children: any;
+}
 export class FiberNode {
   type: any;
   tag: any;
@@ -135,6 +140,9 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
   } else if (typeof type === 'object' && type.$$typeof === REACT_PROVIDER_TYPE) {
     // 支持ContextProvider类型的fiberNode
     fiberTag = ContextProvider;
+  }  else if (typeof type === 'object' && type.$$typeof === REACT_SUSPENSE_TYPE) {
+    // 支持Suspense类型的fiberNode
+    fiberTag = SuspenseComponent;
   } else if (typeof type !== 'function' && __DEV__) {
     console.warn('未定义的type类型', element);
   }
@@ -146,7 +154,14 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
   return fiber;
 }
 
+// Fragment对应的fiber
 export function createFiberFromFragment(elements: any[], key: Key): FiberNode {
   const fiber = new FiberNode(Fragment, elements, key);
+  return fiber;
+}
+
+// offscreen对应的fiber
+export function createFiberFromOffscreen(pendingProps: OffscreenProps): FiberNode {
+  const fiber = new FiberNode(OffscreenComponent, pendingProps, null);
   return fiber;
 }
