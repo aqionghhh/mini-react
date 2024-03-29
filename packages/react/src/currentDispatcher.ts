@@ -1,12 +1,13 @@
 // 用于实现内部的数据共享层(dispatcher: 当前使用的Hooks集合)
 
-import { Action } from "shared/ReactTypes";
+import { Action, ReactContext } from "shared/ReactTypes";
 
 export interface Dispatcher {
   useState: <T>(initialState: (() => T) | T) => [T, Dispatch<T>]; // initialState接收函数或者参数T，返回一个数组
   useEffect: (callback: () => void | void, deps: any[] | void) => void;
   useTransition: () => [boolean, (callback: () => void) => void];
   useRef: <T>(initialValue: T) => { current: T };
+  useContext: <T>(context: ReactContext<T>) => T; 
 }
 
 export type Dispatch<State> = (action: Action<State>) => void;

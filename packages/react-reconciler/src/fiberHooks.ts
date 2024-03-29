@@ -1,5 +1,5 @@
 import internals from "shared/internals";
-import { Action } from "shared/ReactTypes";
+import { Action, ReactContext } from "shared/ReactTypes";
 import { Dispatch, Dispatcher } from "react/src/currentDispatcher";
 import ReactCurrentBatchConfig from "react/src/currentBatchConfig";
 import { FiberNode } from "./fiber";
@@ -78,6 +78,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useEffect: mountEffect,
   useTransition: mountTransition,
   useRef: mountRef,
+  useContext: readContext,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -85,6 +86,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useEffect: updateEffect,
   useTransition: updateTransition,
   useRef: updateRef,
+  useContext: readContext,
 };
 
 function mountRef<T>(initialValue: T): { current: T } {
@@ -366,4 +368,14 @@ function mountWorkInProgressHook(): Hook {
     workInProgressHook = hook;
   }
   return workInProgressHook;
+}
+
+function readContext<T>(context: ReactContext<T>): T {
+  const consumer = currentlyRenderingFiber;
+  if (consumer === null) {  // 代表了当前useContext脱离了函数组件来使用；eg：window.useContext(xxx)调用useContext
+   throw new Error('只能在函数组件中调用useContext'); 
+  }
+
+  const value = context._currentValue;
+  return value;
 }

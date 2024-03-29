@@ -3,11 +3,12 @@
 import { ReactElementType } from "shared/ReactTypes";
 import { FiberNode } from "./fiber";
 import { UpdateQueue, processUpdateQueue } from "./updateQueue";
-import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment } from "./workTags";
+import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment, ContextProvider } from "./workTags";
 import { mountChildFibers, reconcileChildFibers } from "./childFibers";
 import { renderWithHooks } from "./fiberHooks";
 import { Lane } from "./fiberLanes";
 import { Ref } from "./fiberFlags";
+import { pushProvider } from "./fiberContext";
 
 // 比较，然后生成子fiberNode并返回
 export const beginWork = (wip: FiberNode, renderLane: Lane) => {
@@ -25,6 +26,8 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
       return updateFunctionComponent(wip, renderLane);  // 传入renderLane的原因：FunctionComponent可以触发更新
     case Fragment:
       return updateFragment(wip);
+    case ContextProvider:
+      return updateContextProvider(wip);
       
     default:
       if (__DEV__) {
@@ -33,6 +36,19 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
       break;
   }
   return null;
+}
+
+function updateContextProvider(wip: FiberNode) {
+  // 先获取provideType
+  const provideType = wip.type; // 获取到的是一个对象
+  const context = provideType._context;
+  const newProps = wip.pendingProps;
+
+  pushProvider(context, newProps.value);
+
+  const nextChildren = newProps.children;
+  reconcilerChildren(wip, nextChildren);
+  return wip.child;
 }
 
 function updateFragment(wip: FiberNode) {

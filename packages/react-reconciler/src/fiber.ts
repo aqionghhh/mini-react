@@ -1,11 +1,12 @@
 // 用于存放fiberNode数据结构
 import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
-import { Fragment, FunctionComponent, HostComponent, WorkTag } from './workTags';
+import { ContextProvider, Fragment, FunctionComponent, HostComponent, WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig'; // 在tsconfig中进行了配置，这里不用写死路径
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
+import { REACT_PROVIDER_TYPE } from 'shared/ReactSymbols';
 
 export class FiberNode {
   type: any;
@@ -131,6 +132,9 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
 
   if (typeof type === 'string') { // 对于一个<div></div>来说的话，type就是string类型
     fiberTag = HostComponent;
+  } else if (typeof type === 'object' && type.$$typeof === REACT_PROVIDER_TYPE) {
+    // 支持ContextProvider类型的fiberNode
+    fiberTag = ContextProvider;
   } else if (typeof type !== 'function' && __DEV__) {
     console.warn('未定义的type类型', element);
   }

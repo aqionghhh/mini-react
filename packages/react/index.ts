@@ -2,6 +2,8 @@
 import currentDispatcher, { Dispatcher, resolveDispatcher } from './src/currentDispatcher';
 import ReactCurrentBatchConfig from './src/currentBatchConfig';
 import { jsxDEV, jsx, isValidElement as isValidElementFn } from './src/jsx';
+export { REACT_FRAGMENT_TYPE as Fragment } from 'shared/ReactSymbols';
+export { createContext } from './src/context';
 
 // 使用的hooks都是从React包中暴露出去的
 export const useState: Dispatcher['useState'] = (initialState) => {
@@ -26,6 +28,12 @@ export const useRef: Dispatcher['useRef'] = (initialValue) => {
   // 获取Dispatcher中的useRef
   const dispatcher = resolveDispatcher();
   return dispatcher.useRef(initialValue);
+}
+
+export const useContext: Dispatcher['useContext'] = (context) => {
+  // 获取Dispatcher中的useContext
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useContext(context);
 }
 
 // 内部的数据共享层（变量名字可以自己取）
