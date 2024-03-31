@@ -1,5 +1,5 @@
 import internals from "shared/internals";
-import { Action, ReactContext } from "shared/ReactTypes";
+import { Action, ReactContext, Thenable, Usable } from "shared/ReactTypes";
 import { Dispatch, Dispatcher } from "react/src/currentDispatcher";
 import ReactCurrentBatchConfig from "react/src/currentBatchConfig";
 import { FiberNode } from "./fiber";
@@ -8,6 +8,8 @@ import { scheduleUpdateOnFiber } from "./workLoop";
 import { Lane, NoLane, requestUpdateLane } from "./fiberLanes";
 import { Flags, PassiveEffect } from "./fiberFlags";
 import { HookHasEffect, Passive } from "./hookEffectTag";
+import { REACT_CONTEXT_TYPE } from "shared/ReactSymbols";
+import { trackUsedThenable } from "./thenable";
 
 let currentlyRenderingFiber: FiberNode | null = null; // 当前正在render的fiber
 let workInProgressHook: Hook | null = null; // 指向当前正在处理的hook（当前正在进入一个FC的beginWork阶段时，会处理当前链表中的每一个hook，需要一个指针来指向正在处理的hook）
@@ -79,6 +81,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useTransition: mountTransition,
   useRef: mountRef,
   useContext: readContext,
+  use,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -87,6 +90,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useTransition: updateTransition,
   useRef: updateRef,
   useContext: readContext,
+  use,
 };
 
 function mountRef<T>(initialValue: T): { current: T } {
@@ -378,4 +382,19 @@ function readContext<T>(context: ReactContext<T>): T {
 
   const value = context._currentValue;
   return value;
+}
+
+function use<T>(usable: Usable<T>): T {
+  if (usable !== null && typeof usable === 'object') {  // 接收的是数据类型是Thenable或者是ReactContext
+    if (typeof (usable as Thenable<T>).then === 'function') { // 是Thenable
+      const thenable = usable as Thenable<T>;
+
+      return trackUsedThenable(thenable);
+    } else if ((usable as ReactContext<T>).$$typeof === REACT_CONTEXT_TYPE) { // 是ReactContext
+      const context = usable as ReactContext<T>;
+
+      return readContext(context);  // 直接当作一个ReactContext来使用
+    }
+  }
+  throw new Error('不支持的use参数：' + usable);
 }

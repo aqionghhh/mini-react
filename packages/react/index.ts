@@ -2,6 +2,7 @@
 import currentDispatcher, { Dispatcher, resolveDispatcher } from './src/currentDispatcher';
 import ReactCurrentBatchConfig from './src/currentBatchConfig';
 import { jsxDEV, jsx, isValidElement as isValidElementFn } from './src/jsx';
+import { Usable } from 'shared/ReactTypes';
 export { REACT_FRAGMENT_TYPE as Fragment, REACT_SUSPENSE_TYPE as Suspense } from 'shared/ReactSymbols';
 export { createContext } from './src/context';
 
@@ -34,6 +35,12 @@ export const useContext: Dispatcher['useContext'] = (context) => {
   // 获取Dispatcher中的useContext
   const dispatcher = resolveDispatcher();
   return dispatcher.useContext(context);
+}
+
+export const use: Dispatcher['use'] = <T>(usable: Usable<T>) => {
+  // 获取Dispatcher中的useContext
+  const dispatcher = resolveDispatcher();
+  return dispatcher.use(usable);
 }
 
 // 内部的数据共享层（变量名字可以自己取）
