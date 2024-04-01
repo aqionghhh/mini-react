@@ -9,6 +9,10 @@ export const ChildDeletion = 0b0000100; // 删除子节点（结构相关，如�
 export const PassiveEffect = 0b0001000; // 表示在当前fiber上 本次更新存在需要触发useEffect的情况
 export const Ref = 0b0010000; // 
 export const Visibility = 0b0100000; // Suspense 
+export const DidCapture = 0b1000000; // Suspense 
+
+// render阶段 捕获到的一些东西（可能是抛出去的挂起的东西，也可能是Error Boundary的一些错误
+export const ShouldCapture = 0b01000000000;
 
 // mutation阶段需要执行的操作
 // 在mutation阶段，如果有需要对ref进行操作的话，那就是解绑之前的ref

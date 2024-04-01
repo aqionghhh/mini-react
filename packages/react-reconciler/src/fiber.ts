@@ -1,5 +1,5 @@
 // 用于存放fiberNode数据结构
-import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
+import { Props, Key, Ref, ReactElementType, Wakeable } from 'shared/ReactTypes';
 import { ContextProvider, Fragment, FunctionComponent, HostComponent, OffscreenComponent, SuspenseComponent, WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig'; // 在tsconfig中进行了配置，这里不用写死路径
@@ -23,7 +23,7 @@ export class FiberNode {
   sibling: FiberNode | null;
   child: FiberNode | null;
   index: number;
-  ref: Ref;
+  ref: Ref | null;
   memoizedProps: Props | null;
   memoizedState: any;
   alternate: FiberNode | null;
@@ -83,12 +83,21 @@ export class FiberRootNode {
   callbackNode: CallbackNode | null;
   callbackPriority: Lane;
 
+  // WeakMap { promise: Set<Lane> }
+  pingCache: WeakMap<Wakeable<any>, Set<Lane>> | null; // ping的缓存 
+  
+  suspendedLanes: Lanes; // 当前root下所有被挂起的更新的优先级
+  pingLanes: Lanes; // 当前root下所有被挂起的更新中被ping函数执行过的更新
+
   constructor(container: Container, hostRootFiber: FiberNode) {
     this.container = container;
     this.current = hostRootFiber;
     hostRootFiber.stateNode = this; // hostRootFiber的stateNode指向fiberRootNode
     this.finishedWork = null;
     this.pendingLanes = NoLanes;
+    this.suspendedLanes = NoLanes;
+    this.pingLanes = NoLanes;
+
     this.finishedLane = NoLane;
 
     this.pendingPassiveEffects = {
@@ -98,6 +107,8 @@ export class FiberRootNode {
 
     this.callbackNode = null;
     this.callbackPriority = NoLane;
+
+    this.pingCache = null;
   }
 
 }
@@ -140,7 +151,7 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
   } else if (typeof type === 'object' && type.$$typeof === REACT_PROVIDER_TYPE) {
     // 支持ContextProvider类型的fiberNode
     fiberTag = ContextProvider;
-  }  else if (typeof type === 'object' && type.$$typeof === REACT_SUSPENSE_TYPE) {
+  } else if (type === REACT_SUSPENSE_TYPE) {
     // 支持Suspense类型的fiberNode
     fiberTag = SuspenseComponent;
   } else if (typeof type !== 'function' && __DEV__) {

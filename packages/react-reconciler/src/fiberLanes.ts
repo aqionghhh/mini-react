@@ -50,6 +50,9 @@ export function isSubsetOfLanes(set: Lanes, subSet:Lane) {
 // 从fiberRootNode中移除lane
 export function markRootFinished(root: FiberRootNode, lane: Lane) {
   root.pendingLanes &= ~lane;
+
+  root.suspendedLanes = NoLanes;
+  root.pendingLanes = NoLanes;
 }
 
 // 从lane转换到调度器优先级
@@ -80,4 +83,39 @@ export function schedulerPriorityToLane(schedulerPriority: number) {
     return DefaultLane;
   }
   return NoLane;  // NoLane对应unstable_IdlePriority
+}
+
+// 标记root下某个lane被挂起
+export function markRootSuspended(root: FiberRootNode, suspendedLane: Lane) {
+  root.suspendedLanes |= suspendedLane;
+  root.pendingLanes &= ~suspendedLane;  // 被标记挂起后，将它从pendingLanes中移除
+}
+
+// 标记root下某个lane被ping函数执行过了
+export function markRootPinged(root: FiberRootNode, pingedLane: Lane) {
+  root.pingLanes |= root.suspendedLanes & pingedLane;  // 为什么要先取交集：因为当前所有被ping的lane，一定是被挂起的lane的子集（一定是先挂起再被ping）
+}
+
+export function getNextLane(root: FiberRootNode): Lane {
+  const pendingLanes = root.pendingLanes;
+
+  if (pendingLanes === NoLanes) {
+    return NoLanes;
+  }
+
+  let nextLane = NoLane;
+  // 取到pendingLanes中没有被挂起的lane
+  const suspendedLanes = pendingLanes & ~root.suspendedLanes;
+  if (suspendedLanes !== NoLane) {
+    // 从这里面取出优先级最高的lane
+    nextLane = getHighestPriority(suspendedLanes);
+  } else {  // 表示所有的lane都被挂起了
+    // 被挂起后可能会存在被ping过的lane
+    const pendedLanes = pendingLanes & root.pendingLanes;
+    if (pendedLanes !== NoLanes) {
+      nextLane = getHighestPriority(pendedLanes);
+    }
+  }
+
+  return nextLane;
 }

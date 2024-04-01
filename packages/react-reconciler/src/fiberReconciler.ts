@@ -22,7 +22,7 @@ export function updateContainer(element: ReactElementType | null, root: FiberRoo
   // 默认启用同步更新
   unstable_runWithPriority(unstable_ImmediatePriority, () => {  // 使用同步优先级
     const hostRootFiber = root.current;
-    
+
     const lane = requestUpdateLane(); // 这里获取到的lane就是同步优先级的lane
   
     // 首屏渲染触发同步更新

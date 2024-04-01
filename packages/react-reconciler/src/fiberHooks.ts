@@ -398,3 +398,10 @@ function use<T>(usable: Usable<T>): T {
   }
   throw new Error('不支持的use参数：' + usable);
 }
+
+// 重置FC的全局变量
+export function resetHooksOnUnwind() {
+  currentlyRenderingFiber = null;
+  currentHook = null;
+  workInProgressHook = null;
+}

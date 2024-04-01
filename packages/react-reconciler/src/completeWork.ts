@@ -5,6 +5,7 @@ import { FiberNode } from "./fiber";
 import { ContextProvider, Fragment, FunctionComponent, HostComponent, HostRoot, HostText, OffscreenComponent, SuspenseComponent } from "./workTags";
 import { NoFlags, Ref, Update, Visibility } from "./fiberFlags";
 import { popProvider } from "./fiberContext";
+import { popSuspenseHandler } from "./suspenseContext";
 
 function markUpdate(fiber: FiberNode) {
   fiber.flags |= Update;
@@ -74,6 +75,7 @@ export const completeWork = (wip: FiberNode) => {
       return null;
     // 在SuspenseComponent中对比current Offscreen mode与wip Offscreen mode
     case SuspenseComponent: 
+      popSuspenseHandler();
       // 不使用OffscreenComponent比较的原因：在fallback展示的情况下，无法进入offscreen的completeWork阶段（offscreen的fiber树存在，但是不会进入）
       // 因为fallback的return是fragment、fragment的return是suspense，按照深度优先遍历，进入不到offscreen
       const offscreenFiber = wip.child as FiberNode; 

@@ -7,11 +7,13 @@ import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment, Context
 import { mountChildFibers, reconcileChildFibers } from "./childFibers";
 import { renderWithHooks } from "./fiberHooks";
 import { Lane } from "./fiberLanes";
-import { ChildDeletion, Placement, Ref } from "./fiberFlags";
+import { ChildDeletion, DidCapture, NoFlags, Placement, Ref } from "./fiberFlags";
 import { pushProvider } from "./fiberContext";
+import { pushSuspenseHandler } from "./suspenseContext";
 
 // 比较，然后生成子fiberNode并返回
 export const beginWork = (wip: FiberNode, renderLane: Lane) => {
+  console.log('beginWork', wip);
   switch (wip.tag) {
     case HostRoot:
       // HostRoot的beginWork工作流程： 1. 计算状态的最新值； 2. 创造子fiberNode
@@ -47,15 +49,17 @@ function updateSuspenseComponent(wip: FiberNode) {
 
   // 需要判断当前是正常流程还是挂起流程
   let showFallback = false; // 是否展示fallback
-  const didSuspend = true; // 表示当前是否为挂起状态（先假定为true）
+  const didSuspend = (wip.flags & DidCapture) !== NoFlags; // 表示当前是否为挂起状态
 
   if (didSuspend) { // 当前为挂起状态 
     showFallback = true;
-
+    wip.flags &= ~DidCapture;
   }
 
   const nextPrimaryChildren = nextProps.children; // 对应的offscreen
   const nextFallbackChildren = nextProps.fallback;  // 对应的fallback
+
+  pushSuspenseHandler(wip);
 
   if (current === null) { // mount流程
     if (showFallback) { // mount的挂起流程
@@ -213,6 +217,11 @@ function updateHostRoot(wip: FiberNode, renderLane: Lane) { // renderLane代表�
   // 对于hostRootFiber，创建update的时候，传入的是element；ReactDOM.createRoot(root).render(<APP/>)，<APP/>对应的ReactElement就是这个element
   // 当前计算出来的memoizedState不是一个函数，所以计算出来的memoizedState就是传入的ReactElement
   wip.memoizedState = memoizedState;  
+
+  const current = wip.alternate;  // 在mount阶段时，suspense的场景下，可能存在有fiber被挂起的情况，这样是无法走到commit阶段的，对应的fiber树没有建出来，所以在update时，alternate为空
+  if (current !== null) {
+    current.memoizedState = memoizedState;
+  }
 
   const nextChildren = wip.memoizedState;
   reconcilerChildren(wip, nextChildren);
