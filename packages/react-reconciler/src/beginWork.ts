@@ -8,7 +8,7 @@ import { cloneChildFibers, mountChildFibers, reconcileChildFibers } from "./chil
 import { bailoutHook, renderWithHooks } from "./fiberHooks";
 import { Lane, NoLanes, includeSomeLanes } from "./fiberLanes";
 import { ChildDeletion, DidCapture, NoFlags, Placement, Ref } from "./fiberFlags";
-import { pushProvider } from "./fiberContext";
+import { prepareToReadContext, propagateContextChange, pushProvider } from "./fiberContext";
 import { pushSuspenseHandler } from "./suspenseContext";
 import { shallowEqual } from "shared/shallowEqual";
 
@@ -78,7 +78,7 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
     case Fragment:
       return updateFragment(wip);
     case ContextProvider:
-      return updateContextProvider(wip);
+      return updateContextProvider(wip, renderLane);
     case SuspenseComponent:
       return updateSuspenseComponent(wip);
     case OffscreenComponent:
@@ -290,13 +290,27 @@ function updateOffscreenComponent(wip: FiberNode) {
   return wip.child;
 }
 
-function updateContextProvider(wip: FiberNode) {
+function updateContextProvider(wip: FiberNode, renderLane: Lane) {
   // 先获取provideType
   const provideType = wip.type; // 获取到的是一个对象
   const context = provideType._context;
   const newProps = wip.pendingProps;
+  const oldProps = wip.memoizedProps;
+  const newValue = newProps.value;
 
-  pushProvider(context, newProps.value);
+  pushProvider(context, newValue);
+
+  if (oldProps !== null) {
+    const oldValue = oldProps.value;
+    if (Object.is(oldValue, newValue) && oldProps.children === newProps.children) { // 判断context的value值是否发生变化
+      // value值没变，且children相等
+      // 命中context的bailout
+      return bailoutOnAlreadyFinishedWork(wip, renderLane);
+    } else {  // value发生变化
+      // 需要向下寻找依赖了当前context的函数组件，并标记childLanes
+      propagateContextChange(wip, context, renderLane);
+    }
+  }
 
   const nextChildren = newProps.children;
   reconcilerChildren(wip, nextChildren);
@@ -310,6 +324,8 @@ function updateFragment(wip: FiberNode) {
 }
 
 function updateFunctionComponent(wip: FiberNode, Component: FiberNode['type'], renderLane: Lane ) { // renderLane代表本次更新的lane
+  prepareToReadContext(wip, renderLane); // context相关：重置指向最后一个ContextItem的全局变量
+
   // render（renderWithHooks会进行状态计算，状态计算时会判断是否命中bailout，标记didReceiveUpdate）
   const nextChildren = renderWithHooks(wip, Component, renderLane);  // 这里的nextChildren就是函数组件执行完成的结果（函数组件中return出来的内容）
 

@@ -11,6 +11,7 @@ import { HookHasEffect, Passive } from "./hookEffectTag";
 import { REACT_CONTEXT_TYPE } from "shared/ReactSymbols";
 import { trackUsedThenable } from "./thenable";
 import { markWipReceivedUpdate } from "./beginWork";
+import { readContext as readContextOrigin } from "./fiberContext";
 
 let currentlyRenderingFiber: FiberNode | null = null; // 当前正在render的fiber
 let workInProgressHook: Hook | null = null; // 指向当前正在处理的hook（当前正在进入一个FC的beginWork阶段时，会处理当前链表中的每一个hook，需要一个指针来指向正在处理的hook）
@@ -424,14 +425,9 @@ function mountWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
-function readContext<T>(context: ReactContext<T>): T {
-  const consumer = currentlyRenderingFiber;
-  if (consumer === null) {  // 代表了当前useContext脱离了函数组件来使用；eg：window.useContext(xxx)调用useContext
-   throw new Error('只能在函数组件中调用useContext'); 
-  }
-
-  const value = context._currentValue;
-  return value;
+function readContext<Value>(context: ReactContext<Value>): Value {
+  const consumer = currentlyRenderingFiber as FiberNode;
+  return readContextOrigin(consumer, context);
 }
 
 function use<T>(usable: Usable<T>): T {

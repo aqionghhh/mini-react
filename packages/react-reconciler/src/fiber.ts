@@ -7,7 +7,14 @@ import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
 import { REACT_MEMO_TYPE, REACT_PROVIDER_TYPE, REACT_SUSPENSE_TYPE } from 'shared/ReactSymbols';
+import { ContextItem } from './fiberContext';
 
+interface FiberDependencies<Value> {
+  // firstContext会形成一条单向链表，这条单向链表保存的context都是当前函数组件中依赖的context；context和context之间可能并没有关系
+  firstContext: ContextItem<Value> | null;
+  lanes: Lanes; // 某次更新会导致context的value会发生变化，那么它的dependencies的lanes上就会增加这个更新对应的lane
+  // 通过查找某一个fiberDependencies下的lanes字段，就可以知道当前fiber中的context是否存在待执行的更新
+}
 
 export interface OffscreenProps {
   mode: 'visible' | 'hidden';
@@ -35,6 +42,8 @@ export class FiberNode {
   // 即所有的子树的lanes的合集就是root.pendingLanes
   lanes: Lanes; 
   childLanes: Lanes;
+
+  dependencies: FiberDependencies<any> | null;
 
   // pendingProps是接下来有哪些props需要改变；key对应了ReactElement的key；tag是fiberNode是怎样的一个节点
   constructor(tag: WorkTag, pendingProps: Props, key: Key) {
@@ -69,6 +78,8 @@ export class FiberNode {
 
     this.lanes = NoLanes; // 保存fiberNode中 所有未执行更新对应的lane
     this.childLanes = NoLanes;  // 保存一个fiberNode子树中 所有未执行更新对应的lane
+
+    this.dependencies = null;
   }
 
 };
@@ -147,6 +158,13 @@ export const createWorkInProgress = (current: FiberNode, pendingProps: Props): F
 
   wip.lanes = current.lanes;
   wip.childLanes = current.childLanes;
+
+  // context相关
+  const currentDeps = current.dependencies;
+  wip.dependencies = currentDeps === null ? null : {
+    lanes: currentDeps.lanes,
+    firstContext: currentDeps.firstContext,
+  };
 
   return wip;
 }
