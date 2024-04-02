@@ -34,14 +34,26 @@ export const useRef: Dispatcher['useRef'] = (initialValue) => {
 
 export const useContext: Dispatcher['useContext'] = (context) => {
   // 获取Dispatcher中的useContext
-  const dispatcher = resolveDispatcher();
+  const dispatcher = resolveDispatcher() as Dispatcher;
   return dispatcher.useContext(context);
 }
 
 export const use: Dispatcher['use'] = <T>(usable: Usable<T>) => {
   // 获取Dispatcher中的useContext
-  const dispatcher = resolveDispatcher();
+  const dispatcher = resolveDispatcher() as Dispatcher;
   return dispatcher.use(usable);
+}
+
+export const useCallback: Dispatcher['useCallback'] = (callback, deps) => {
+  // 获取Dispatcher中的useCallback
+  const dispatcher = resolveDispatcher() as Dispatcher;
+  return dispatcher.useCallback(callback, deps);
+}
+
+export const useMemo: Dispatcher['useMemo'] = (nextCreate, deps) => {
+  // 获取Dispatcher中的useMemo
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useMemo(nextCreate, deps);
 }
 
 // 内部的数据共享层（变量名字可以自己取）

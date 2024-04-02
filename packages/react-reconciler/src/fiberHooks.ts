@@ -31,7 +31,7 @@ export interface Effect {
   tag: Flags;
   create: EffectCallBack | void;
   destroy: EffectCallBack | void;
-  deps: EffectDeps;
+  deps: HookDeps;
   next: Effect | null;
 }
 
@@ -42,7 +42,7 @@ export interface FCUpdateQueue<State> extends UpdateQueue<State> {
 }
 
 type EffectCallBack = () => void;
-type EffectDeps = any[] | null;
+export type HookDeps = any[] | null;
 
 export function renderWithHooks(wip: FiberNode,Component: FiberNode['type'], lane: Lane) {  // 对于一个函数组件，它的函数保存在wip.type上(memo组件是在wip.type.type上)
   // 赋值操作
@@ -82,6 +82,8 @@ const HooksDispatcherOnMount: Dispatcher = {
   useRef: mountRef,
   useContext: readContext,
   use,
+  useMemo: mountMemo,
+  useCallback: mountCallback,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -91,6 +93,8 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useRef: updateRef,
   useContext: readContext,
   use,
+  useMemo: updateMemo,
+  useCallback: updateCallback,
 };
 
 function mountRef<T>(initialValue: T): { current: T } {
@@ -107,7 +111,7 @@ function updateRef<T>(initialValue: T): { current: T } {
   return hook.memoizedState;
 }
 
-function updateEffect(create: EffectCallBack | void, deps: EffectDeps | void) {
+function updateEffect(create: EffectCallBack | void, deps: HookDeps | void) {
   // 找到当前useState对应的hook数据
   const hook = updateWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
@@ -132,7 +136,7 @@ function updateEffect(create: EffectCallBack | void, deps: EffectDeps | void) {
   }
 }
 
-function areHookInputEqual(nextDeps: EffectDeps, prevDeps: EffectDeps) {
+function areHookInputEqual(nextDeps: HookDeps, prevDeps: HookDeps) {
   if (prevDeps === null || nextDeps === null) { // 比较失败
     return false;
   }
@@ -145,7 +149,7 @@ function areHookInputEqual(nextDeps: EffectDeps, prevDeps: EffectDeps) {
   return true;  // 全等就返回true
 }
 
-function mountEffect(create: EffectCallBack | void, deps: EffectDeps | void) {
+function mountEffect(create: EffectCallBack | void, deps: HookDeps | void) {
   // 找到当前useState对应的hook数据
   const hook = mountWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
@@ -160,7 +164,7 @@ function pushEffect(
   hookFlags: Flags, 
   create: EffectCallBack | void, 
   destroy: EffectCallBack | void, 
-  deps: EffectDeps
+  deps: HookDeps
 ): Effect {
   const effect: Effect = {
     tag: hookFlags,
@@ -460,4 +464,62 @@ export function bailoutHook(wip: FiberNode, renderLane: Lane) {
 
   // 当前组件已经bailout，那么代表 当前fiber中虽然存在update（改变state状态），但update经过计算后得出state没有发生变化，所以可以从lanes中将该lane移除掉
   current.lanes = removeLanes(current.lanes, renderLane);
+}
+
+// mount useCallback
+function mountCallback<T>(callback: T, deps: HookDeps | undefined) {
+  const hook = mountWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  hook.memoizedState = [callback, nextDeps];
+  return callback;
+}
+
+// update useCallback
+function updateCallback<T>(callback: T, deps: HookDeps | undefined) {
+  const hook = updateWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  const prevState = hook.memoizedState;
+
+  // 判断依赖项是否发生改变
+  if (nextDeps !== null) {
+    const prevDeps = prevState[1];
+    if (areHookInputEqual(nextDeps, prevDeps)) {
+      // 没变
+      return prevState[0];
+    }
+  }
+  // 变了的话使用传入的callback
+  hook.memoizedState = [callback, nextDeps];
+  return callback;
+}
+
+// mount useMemo
+function mountMemo<T>(nextCreate: () => T, deps: HookDeps | undefined) {
+  const hook = mountWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  const nextValue = nextCreate();
+
+  hook.memoizedState = [nextValue, nextDeps]; // 缓存nextValue
+  return nextValue;
+}
+
+// update useMemo
+function updateMemo<T>(nextCreate: () => T, deps: HookDeps | undefined) {
+  const hook = updateWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  const prevState = hook.memoizedState;
+
+  // 判断依赖项是否发生改变
+  if (nextDeps !== null) {
+    const prevDeps = prevState[1];
+    if (areHookInputEqual(nextDeps, prevDeps)) {
+      // 没变
+      return prevState[0];  // 返回之前保存的nextValue
+    }
+  }
+
+  // 变了
+  const nextValue = nextCreate();
+  hook.memoizedState = [nextValue, nextDeps]; // 缓存nextValue
+  return nextValue;
 }

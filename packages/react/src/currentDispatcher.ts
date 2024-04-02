@@ -1,14 +1,17 @@
 // 用于实现内部的数据共享层(dispatcher: 当前使用的Hooks集合)
 
+import { HookDeps } from "react-reconciler/src/fiberHooks";
 import { Action, ReactContext, Usable } from "shared/ReactTypes";
 
 export interface Dispatcher {
   useState: <T>(initialState: (() => T) | T) => [T, Dispatch<T>]; // initialState接收函数或者参数T，返回一个数组
-  useEffect: (callback: () => void | void, deps: any[] | void) => void;
+  useEffect: (callback: () => void | void, deps: HookDeps | undefined) => void;
   useTransition: () => [boolean, (callback: () => void) => void];
   useRef: <T>(initialValue: T) => { current: T };
   useContext: <T>(context: ReactContext<T>) => T; 
   use: <T>(usable: Usable<T>) => T;
+  useMemo: <T>(nextCreate: () => T, deps: HookDeps | undefined) => void;
+  useCallback: <T>(callback: T, deps: HookDeps | undefined) => void;
 }
 
 export type Dispatch<State> = (action: Action<State>) => void;
