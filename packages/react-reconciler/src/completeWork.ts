@@ -2,7 +2,7 @@
 
 import { Container, Instance, appendInitialChild, createInstance, createTextInstance } from "hostConfig";
 import { FiberNode } from "./fiber";
-import { ContextProvider, Fragment, FunctionComponent, HostComponent, HostRoot, HostText, OffscreenComponent, SuspenseComponent } from "./workTags";
+import { ContextProvider, Fragment, FunctionComponent, HostComponent, HostRoot, HostText, MemoComponent, OffscreenComponent, SuspenseComponent } from "./workTags";
 import { NoFlags, Ref, Update, Visibility } from "./fiberFlags";
 import { popProvider } from "./fiberContext";
 import { popSuspenseHandler } from "./suspenseContext";
@@ -67,6 +67,7 @@ export const completeWork = (wip: FiberNode) => {
     case FunctionComponent:
     case Fragment:
     case OffscreenComponent:
+    case MemoComponent:
       bubbleProperties(wip);
       return null;
     case ContextProvider:

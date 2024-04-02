@@ -3,13 +3,14 @@
 import { ReactElementType } from "shared/ReactTypes";
 import { FiberNode, OffscreenProps, createFiberFromFragment, createFiberFromOffscreen, createWorkInProgress } from "./fiber";
 import { UpdateQueue, processUpdateQueue } from "./updateQueue";
-import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment, ContextProvider, SuspenseComponent, OffscreenComponent } from "./workTags";
+import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment, ContextProvider, SuspenseComponent, OffscreenComponent, MemoComponent } from "./workTags";
 import { cloneChildFibers, mountChildFibers, reconcileChildFibers } from "./childFibers";
 import { bailoutHook, renderWithHooks } from "./fiberHooks";
-import { Lane, NoLanes, includeSomeLanes, lanesToSchedulerPriority } from "./fiberLanes";
+import { Lane, NoLanes, includeSomeLanes } from "./fiberLanes";
 import { ChildDeletion, DidCapture, NoFlags, Placement, Ref } from "./fiberFlags";
 import { pushProvider } from "./fiberContext";
 import { pushSuspenseHandler } from "./suspenseContext";
+import { shallowEqual } from "shared/shallowEqual";
 
 // 表示是否能命中bailout
 let didReceiveUpdate = false;  // 为false表示能命中bailout策略
@@ -29,6 +30,8 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
   if (current !== null) {  // 
     const oldProps = current.memoizedProps;
     const newProps = wip.pendingProps;
+    // 全等比较（如果一个父节点没有命中bailout的话，那么它的子组件是通过reconcile生成的，reconcile生成的话，component props就是一个全新的对象，全等比较的话会不相等）
+    // React.memo：让「props的全等比较」变为「props的浅比较」
     if (oldProps !== newProps || current.type !== wip.type) {  // 四要素之二：props比较、type比较
       // 不能命中
       didReceiveUpdate = true;
@@ -71,7 +74,7 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
       // HostText没有beginWork工作流程，因为他没有子节点
       return null;
     case FunctionComponent:
-      return updateFunctionComponent(wip, renderLane);  // 传入renderLane的原因：FunctionComponent可以触发更新
+      return updateFunctionComponent(wip, wip.type, renderLane);  // 传入renderLane的原因：FunctionComponent可以触发更新
     case Fragment:
       return updateFragment(wip);
     case ContextProvider:
@@ -80,6 +83,8 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
       return updateSuspenseComponent(wip);
     case OffscreenComponent:
       return updateOffscreenComponent(wip);
+    case MemoComponent:
+      return updateMemoComponent(wip, renderLane);
     default:
       if (__DEV__) {
         console.warn('beginWork未实现的类型');
@@ -87,6 +92,32 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
       break;
   }
   return null;
+}
+
+// Memo
+function updateMemoComponent(wip: FiberNode, renderLane: Lane) {
+  // bailout四要素
+  // props浅比较
+  const current = wip.alternate;
+  const nextProps = wip.pendingProps;
+  const Component = wip.type.type;
+
+  if (current !== null) {
+    const prevProps = current.memoizedProps;
+    // 浅比较props  
+    if (shallowEqual(prevProps, nextProps) && current.ref === wip.ref) {
+      didReceiveUpdate = false; // 命中bailout
+      wip.pendingProps = prevProps;
+
+      // state context
+      if (!checkoutScheduledUpdateOrContext(current, renderLane)) {
+        // 满足四要素
+        wip.lanes = current.lanes;
+        return bailoutOnAlreadyFinishedWork(wip, renderLane);
+      }
+    }
+  }
+  return updateFunctionComponent(wip, Component, renderLane);
 }
 
 // bailout策略
@@ -278,9 +309,9 @@ function updateFragment(wip: FiberNode) {
   return wip.child;
 }
 
-function updateFunctionComponent(wip: FiberNode, renderLane: Lane ) { // renderLane代表本次更新的lane
+function updateFunctionComponent(wip: FiberNode, Component: FiberNode['type'], renderLane: Lane ) { // renderLane代表本次更新的lane
   // render（renderWithHooks会进行状态计算，状态计算时会判断是否命中bailout，标记didReceiveUpdate）
-  const nextChildren = renderWithHooks(wip, renderLane);  // 这里的nextChildren就是函数组件执行完成的结果（函数组件中return出来的内容）
+  const nextChildren = renderWithHooks(wip, Component, renderLane);  // 这里的nextChildren就是函数组件执行完成的结果（函数组件中return出来的内容）
 
   const current = wip.alternate;
   if (current !== null && !didReceiveUpdate) {  // update && 命中bailout

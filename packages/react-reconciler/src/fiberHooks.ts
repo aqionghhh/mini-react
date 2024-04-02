@@ -44,7 +44,7 @@ export interface FCUpdateQueue<State> extends UpdateQueue<State> {
 type EffectCallBack = () => void;
 type EffectDeps = any[] | null;
 
-export function renderWithHooks(wip: FiberNode, lane: Lane) {
+export function renderWithHooks(wip: FiberNode,Component: FiberNode['type'], lane: Lane) {  // 对于一个函数组件，它的函数保存在wip.type上(memo组件是在wip.type.type上)
   // 赋值操作
   currentlyRenderingFiber = wip;
   // 重置hook链表
@@ -63,8 +63,6 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
     currentDispatcher.current = HooksDispatcherOnMount; 
   }
 
-  // 对于一个函数组件，它的函数保存在wip.type上
-  const Component = wip.type;
   const props = wip.pendingProps;
   const children = Component(props);
 

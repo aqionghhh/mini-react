@@ -6,7 +6,8 @@ export type WorkTag =
   typeof Fragment | 
   typeof ContextProvider |
   typeof SuspenseComponent |
-  typeof OffscreenComponent;
+  typeof OffscreenComponent |
+  typeof MemoComponent;
 
 // fiber节点的tag属性
 export const FunctionComponent = 0; // 
@@ -18,3 +19,4 @@ export const ContextProvider = 8;  // Context
 
 export const SuspenseComponent = 13;  // Suspense
 export const OffscreenComponent = 14;  // Suspense
+export const MemoComponent = 15;  // Memo
