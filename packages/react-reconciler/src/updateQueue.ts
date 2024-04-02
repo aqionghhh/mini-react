@@ -11,6 +11,8 @@ export interface Update<State> {
   action: Action<State>; // Action要能够接收两种形式
   lane: Lane;
   next: Update<any> | null;
+  hasEagerState: boolean;
+  eagerState: State | null; 
 }
 
 export interface UpdateQueue<State> {
@@ -22,13 +24,15 @@ export interface UpdateQueue<State> {
 }
 
 // 创建Update实例的方法：createUpdate
-export const createUpdate = <State>(action: Action<State>, lane: Lane): Update<State> => {  // lane在这代表当前update的优先级 
+export const createUpdate = <State>(action: Action<State>, lane: Lane, hasEagerState = false, eagerState = null): Update<State> => {  // lane在这代表当前update的优先级 
 
   // 返回一个update实例
   return {
     action,
     lane,
-    next: null
+    next: null,
+    hasEagerState,
+    eagerState,
   }
 }
 
@@ -75,6 +79,19 @@ export const enqueueUpdate = <State>(
   const alternate = fiber.alternate;
   if (alternate !== null) { // 消费lanes的时候，其实是在消费wip的lanes；但如果遇到什么问题需要重置的话，需要从current中重置，即current.lanes
     alternate.lanes = mergeLanes(alternate.lanes, lane);  // alternate.lanes是current.lanes
+  }
+}
+
+export function basicStateReducer<State>(state: State, action: Action<State>): State {
+  if (action instanceof Function) {
+    // 如果baseState是1，update是2，那么memoizedState就是2
+    // newState = action(baseState);
+    return action(state);
+  } else {
+    // 如果baseState是1，update是(x) => 4x，那么memoizedState就是4
+    // action也有可能是ReactElement
+    // newState = action;
+    return action;
   }
 }
 
@@ -139,15 +156,19 @@ export const processUpdateQueue = <State>(
 
         
         const action = pending.action;
-    
-        if (action instanceof Function) {
-          // 如果baseState是1，update是2，那么memoizedState就是2
-          newState = action(baseState);
+        if (pending.hasEagerState) {  // 在dispatchSetState中前置计算update（为了命中eagerState策略），计算出来的state可以直接复用
+          newState = pending.eagerState;  // 复用
         } else {
-          // 如果baseState是1，update是(x) => 4x，那么memoizedState就是4
-          // action也有可能是ReactElement
-          newState = action;
+          newState = basicStateReducer(baseState, action);  // 重新计算
         }
+        // if (action instanceof Function) {
+        //   // 如果baseState是1，update是2，那么memoizedState就是2
+        //   newState = action(baseState);
+        // } else {
+        //   // 如果baseState是1，update是(x) => 4x，那么memoizedState就是4
+        //   // action也有可能是ReactElement
+        //   newState = action;
+        // }
       }
 
       pending = pending.next as Update<any>; // 遍历下一个

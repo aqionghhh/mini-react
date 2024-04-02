@@ -3,9 +3,9 @@ import { Action, ReactContext, Thenable, Usable } from "shared/ReactTypes";
 import { Dispatch, Dispatcher } from "react/src/currentDispatcher";
 import ReactCurrentBatchConfig from "react/src/currentBatchConfig";
 import { FiberNode } from "./fiber";
-import { Update, UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate, processUpdateQueue } from "./updateQueue";
+import { Update, UpdateQueue, basicStateReducer, createUpdate, createUpdateQueue, enqueueUpdate, processUpdateQueue } from "./updateQueue";
 import { scheduleUpdateOnFiber } from "./workLoop";
-import { Lane, NoLane, mergeLanes, removeLanes, requestUpdateLane } from "./fiberLanes";
+import { Lane, NoLane, NoLanes, mergeLanes, removeLanes, requestUpdateLane } from "./fiberLanes";
 import { Flags, PassiveEffect } from "./fiberFlags";
 import { HookHasEffect, Passive } from "./hookEffectTag";
 import { REACT_CONTEXT_TYPE } from "shared/ReactSymbols";
@@ -38,6 +38,7 @@ export interface Effect {
 // 函数组件的updateQueue
 export interface FCUpdateQueue<State> extends UpdateQueue<State> {
   lasEffect: Effect | null;  // 在传统UpdateQueue上新增了一个lasEffect字段，lasEffect指向Effect链表中的最后一个（为什么是最后一个：lasEffect.next就指向这个链表的第一个）
+  lastRenderedState: State;  // 上一次更新的状态，也就是memoizedState（为了方便 前置计算update时 能够获取到上一次计算的状态
 }
 
 type EffectCallBack = () => void;
@@ -203,7 +204,7 @@ function updateState<State>(): [State, Dispatch<State>] {
   const hook = updateWorkInProgressHook(); 
 
   // 计算新state的逻辑
-  const queue = hook.updateQueue as UpdateQueue<State>;
+  const queue = hook.updateQueue as FCUpdateQueue<State>;
   const baseState = hook.baseState;
   
   const pending = queue.shared.pending;
@@ -250,6 +251,8 @@ function updateState<State>(): [State, Dispatch<State>] {
     hook.memoizedState = memoizedState;
     hook.baseQueue = newBaseQueue;
     hook.baseState = newBaseState;
+
+    queue.lastRenderedState = memoizedState;
   }
   
   return [hook.memoizedState, queue.dispatch as Dispatch<State>];
@@ -311,7 +314,7 @@ function mountState<State>(
     memoizedState = initialState;
   }
 
-  const queue = createUpdateQueue<State>();
+  const queue = createFCUpdateQueue<State>();
   hook.updateQueue = queue;
   hook.memoizedState = memoizedState; // 将initialState保存在hook.memoizedState中
   hook.baseState = memoizedState; // 之前遗留的bug
@@ -321,6 +324,7 @@ function mountState<State>(
   // @ts-ignore
   const dispatch = dispatchSetState.bind(null, currentlyRenderingFiber, queue); // 如果 bind 的第一个参数是 null 或者 undefined，this 就指向全局对象 window
   queue.dispatch = dispatch;
+  queue.lastRenderedState = memoizedState;
   return [memoizedState, dispatch];
 };
 
@@ -357,12 +361,41 @@ function startTransition(setPending: Dispatch<boolean>, callback: () => void) {
 
 function dispatchSetState<State>(
   fiber: FiberNode, 
-  updateQueue: UpdateQueue<State>, 
+  updateQueue: FCUpdateQueue<State>, 
   action: Action<State>
 ) {
   const lane = requestUpdateLane();
   // 既然是要触发更新，那就创建一个update
   const update = createUpdate(action, lane);
+
+  const current = fiber.alternate;
+  if (fiber.lanes === NoLanes && 
+    (current === null || current.lanes === NoLanes) // 首屏渲染 且 lanes为NoLanes
+  ) {
+    // 当前产生的update是这个fiber的第一个update
+    // 原因：如果fiber中的updateQueue中有多个update 就会涉及到优先级问题，可能会有update被跳过；
+    // 所以当fiber中没有其他更新时，创建了一个update，那么就是该fiber的唯一一个update，此时就不会存在优先级原因有update被跳过的情况，此时就可以直接基于这个update计算出state；
+    // 所以只有一个update时可以前置 计算update的逻辑（之前的状态都是在beginWork中计算的）
+    // 为什么需要前置 计算update：正常流程是 交互发生 -> 触发更新 -> 调度 -> render阶段 -> 计算状态；
+    // eagerState策略是在触发更新后直接计算状态，如果发现计算后的状态没有发生变化，那么流程直接结束，不会进入调度及之后的流程
+    // 但是计算状态的过程太过复杂（涉及到优先级问题 update被跳过），直接将这个过程前置到调度前面，会很麻烦，所以要满足eagerState策略的话，需要满足一个前置条件
+    // 即：只有满足「当前fiberNode没有其他更新」才尝试进入eagerState策略
+
+    // 计算更新后的状态
+    const currentState = updateQueue.lastRenderedState; // 更新前的状态
+    const eagerState = basicStateReducer(currentState, action);
+    update.hasEagerState = true;  // 计算出来的eagerState还能在之后的更新中复用，所以可以保留在update上
+    update.eagerState = eagerState;
+
+    if (Object.is(currentState, eagerState)) {  // 命中eagerState
+      enqueueUpdate(updateQueue, update, fiber, NoLane); // 将update插入到updateQueue中 
+      if (__DEV__) {
+        console.warn('命中eagerState策略', fiber);
+      }
+      return;
+    }
+  }
+
   enqueueUpdate(updateQueue, update, fiber, lane); // 将update插入到updateQueue中 
   scheduleUpdateOnFiber(fiber, lane);  // 从当前触发更新的（也就是FC对应）fiber开始调度更新
 }
