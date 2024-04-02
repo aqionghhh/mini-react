@@ -4,16 +4,62 @@ import { ReactElementType } from "shared/ReactTypes";
 import { FiberNode, OffscreenProps, createFiberFromFragment, createFiberFromOffscreen, createWorkInProgress } from "./fiber";
 import { UpdateQueue, processUpdateQueue } from "./updateQueue";
 import { HostComponent, HostRoot, HostText, FunctionComponent, Fragment, ContextProvider, SuspenseComponent, OffscreenComponent } from "./workTags";
-import { mountChildFibers, reconcileChildFibers } from "./childFibers";
-import { renderWithHooks } from "./fiberHooks";
-import { Lane } from "./fiberLanes";
+import { cloneChildFibers, mountChildFibers, reconcileChildFibers } from "./childFibers";
+import { bailoutHook, renderWithHooks } from "./fiberHooks";
+import { Lane, NoLanes, includeSomeLanes, lanesToSchedulerPriority } from "./fiberLanes";
 import { ChildDeletion, DidCapture, NoFlags, Placement, Ref } from "./fiberFlags";
 import { pushProvider } from "./fiberContext";
 import { pushSuspenseHandler } from "./suspenseContext";
 
+// 表示是否能命中bailout
+let didReceiveUpdate = false;  // 为false表示能命中bailout策略
+
+export function markWipReceivedUpdate() {
+  didReceiveUpdate = true;  // 没有命中
+}
+
 // 比较，然后生成子fiberNode并返回
 export const beginWork = (wip: FiberNode, renderLane: Lane) => {
   console.log('beginWork', wip);
+
+  // bailout策略
+  didReceiveUpdate = false; // 每次开始时都需要重置（因为如果有机会改为true的话，就一直无法命中了）
+  const current = wip.alternate;
+  // 判断是否满足bailout的四要素
+  if (current !== null) {  // 
+    const oldProps = current.memoizedProps;
+    const newProps = wip.pendingProps;
+    if (oldProps !== newProps || current.type !== wip.type) {  // 四要素之二：props比较、type比较
+      // 不能命中
+      didReceiveUpdate = true;
+    } else {
+      // 接下来比较state和context
+      const hasScheduledStateOrContext = checkoutScheduledUpdateOrContext(current, renderLane);
+      if (!hasScheduledStateOrContext) {  // 四要素中的state和context不变
+        // 命中bailout
+        didReceiveUpdate = false;
+
+        // context、suspense涉及到入栈出栈的操作
+        switch (wip.tag) {
+          case ContextProvider:
+            const newValue = wip.memoizedProps.value;
+            const context = wip.type._context;
+            pushProvider(context, newValue);
+            break;
+        
+          // TODO Suspense
+          default:
+            break;
+        }
+
+        return bailoutOnAlreadyFinishedWork(wip, renderLane);
+      }
+    }
+  }
+
+  wip.lanes = NoLanes;  // 需要在beginWork中消费lanes
+
+  // 在上述情况中没有满足四要素的话，也会存在某些情况下满足bailout（HostRoot、FunctionComponent）
   switch (wip.tag) {
     case HostRoot:
       // HostRoot的beginWork工作流程： 1. 计算状态的最新值； 2. 创造子fiberNode
@@ -41,6 +87,36 @@ export const beginWork = (wip: FiberNode, renderLane: Lane) => {
       break;
   }
   return null;
+}
+
+// bailout策略
+function bailoutOnAlreadyFinishedWork(wip: FiberNode, renderLane: Lane) {
+  // 命中「性能优化」（bailout策略）的组件可以不通过reconcile生成wip.child，而是直接复用上次更新生成的wip.child
+
+  // 命中bailout策略后还需要判断优化程度，是否可以跳过所有子树的beginWork
+  if (!includeSomeLanes(wip.childLanes, renderLane)) { // 检查wip的整棵子树是否能满足四要素，如果wip的子树也满足，那么所有子树都不需要重新render了
+    if (__DEV__) {
+      console.warn('bailout整棵子树', wip);
+    }
+    return null;  // 不需要继续beginWork了  // beginWork中返回null，代表着这是已经遍历到了叶子节点，递的过程已经结束，可以往上遍历了
+  }
+
+  if (__DEV__) {
+    console.warn('bailout一个fiber', wip);  // 只命中了wip这一个fiber
+  }
+  cloneChildFibers(wip);
+  return wip.child;
+}
+
+// bailout策略中的state和context比较
+function checkoutScheduledUpdateOrContext(current: FiberNode, renderLane: Lane): boolean { // 这里为什么用current而不是wip：因为这个检查的方法是在beginWork中执行，而在beginWork开始的时候会将wip.lanes都消耗完，这里如果取wip，那么wip的lanes就是NoLanes；所以要取current
+  const updateLanes = current.lanes;
+
+  if (includeSomeLanes(updateLanes, renderLane)) {  // 当前fiber中未执行的更新里 是否包含了本次更新对应的lane
+    // 包含，存在更新
+    return true;
+  }
+  return false;
 }
 
 function updateSuspenseComponent(wip: FiberNode) {
@@ -203,7 +279,17 @@ function updateFragment(wip: FiberNode) {
 }
 
 function updateFunctionComponent(wip: FiberNode, renderLane: Lane ) { // renderLane代表本次更新的lane
+  // render（renderWithHooks会进行状态计算，状态计算时会判断是否命中bailout，标记didReceiveUpdate）
   const nextChildren = renderWithHooks(wip, renderLane);  // 这里的nextChildren就是函数组件执行完成的结果（函数组件中return出来的内容）
+
+  const current = wip.alternate;
+  if (current !== null && !didReceiveUpdate) {  // update && 命中bailout
+    // 跟hooks相关的东西需要进行重置
+    bailoutHook(wip, renderLane);
+
+    return bailoutOnAlreadyFinishedWork(wip, renderLane);
+  }
+
   reconcilerChildren(wip, nextChildren);
   return wip.child;
 }
@@ -213,6 +299,9 @@ function updateHostRoot(wip: FiberNode, renderLane: Lane) { // renderLane代表�
   const updateQueue = wip.updateQueue as UpdateQueue<Element>;
   const pending = updateQueue.shared.pending; // 参与计算的update
   updateQueue.shared.pending = null;  // 计算完成之后，这个值就没有用了，所以赋值为null
+
+  const prevChildren = wip.memoizedState;
+
   const { memoizedState } = processUpdateQueue(baseState, pending, renderLane); // memoizedState是当前hostRootFiber最新的状态
   // 对于hostRootFiber，创建update的时候，传入的是element；ReactDOM.createRoot(root).render(<APP/>)，<APP/>对应的ReactElement就是这个element
   // 当前计算出来的memoizedState不是一个函数，所以计算出来的memoizedState就是传入的ReactElement
@@ -220,10 +309,16 @@ function updateHostRoot(wip: FiberNode, renderLane: Lane) { // renderLane代表�
 
   const current = wip.alternate;  // 在mount阶段时，suspense的场景下，可能存在有fiber被挂起的情况，这样是无法走到commit阶段的，对应的fiber树没有建出来，所以在update时，alternate为空
   if (current !== null) {
-    current.memoizedState = memoizedState;
+    if (!current.memoizedState) {
+      current.memoizedState = memoizedState;
+    }
   }
 
   const nextChildren = wip.memoizedState;
+
+  if (prevChildren === nextChildren) {  // 这种情况可以认为HostRoot命中bailout
+    return bailoutOnAlreadyFinishedWork(wip, renderLane);
+  }
   reconcilerChildren(wip, nextChildren);
   return wip.child;
 }

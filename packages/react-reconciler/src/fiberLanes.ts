@@ -119,3 +119,13 @@ export function getNextLane(root: FiberRootNode): Lane {
 
   return nextLane;
 }
+
+// 判断lanes中是否包含本次更新对应的lane，如果包含的话就代表存在更新
+export function includeSomeLanes(set: Lanes, subset: Lane | Lanes): boolean {
+  return (set & subset) !== NoLanes;
+}
+
+// 从lanes集合中移除lanes或者lane
+export function removeLanes(set: Lanes, subset: Lane | Lanes): Lanes {
+  return set & ~subset;
+}

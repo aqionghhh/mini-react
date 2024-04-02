@@ -59,7 +59,7 @@ export function scheduleUpdateOnFiber(fiber: FiberNode, lane: Lane) {  // 用于
   // todo: 调度功能
 
   // 首屏渲染传入的是hostRootFiber；但是其他流程（例如this.setState）传入的是classComponent对应的fiber
-  const root = markUpdateFromFiberToRoot(fiber); // 从当前的fiber一直向上遍历，得到fiberRootNode
+  const root = markUpdateLaneFromFiberToRoot(fiber, lane); // 从当前的fiber一直向上遍历，得到fiberRootNode
   markRootUpdated(root, lane);  // 在schedule阶段记录lane
   ensureRootIsScheduled(root);
 }
@@ -119,10 +119,18 @@ export function markRootUpdated(root: FiberRootNode, lane: Lane) {
   root.pendingLanes = mergeLanes(root.pendingLanes, lane);
 }
 
-function markUpdateFromFiberToRoot(fiber: FiberNode) { // 从当前的fiber一直遍历到根节点（fiberRootNode）
+function markUpdateLaneFromFiberToRoot(fiber: FiberNode, lane: Lane) { // 从当前的fiber一直遍历到根节点（fiberRootNode）
   let node = fiber;
   let parent = node.return;
   while (parent !== null) {
+    // 当前一个fiber触发了更新，就会往上冒泡到root节点
+    // 那么每一级的childLanes中就会附加上当前的lane
+    parent.childLanes = mergeLanes(parent.childLanes, lane);
+    const alternate = parent.alternate;
+    if (alternate !== null) {
+      alternate.childLanes = mergeLanes(alternate.childLanes, lane);
+    }
+
     node = parent;
     parent = node.return;
   }

@@ -31,6 +31,10 @@ export class FiberNode {
   subtreeFlags: Flags;
   updateQueue: unknown;
   deletions: FiberNode[] | null;
+  // root.pendingLanes和fiberNode.lanes的区别：root.pendingLanes是指整个组件树下的fiber中存在的update对应lane的合集；fiberNode.lanes是指某一个fiberNode的update对应lane的合集
+  // 即所有的子树的lanes的合集就是root.pendingLanes
+  lanes: Lanes; 
+  childLanes: Lanes;
 
   // pendingProps是接下来有哪些props需要改变；key对应了ReactElement的key；tag是fiberNode是怎样的一个节点
   constructor(tag: WorkTag, pendingProps: Props, key: Key) {
@@ -62,6 +66,9 @@ export class FiberNode {
     this.flags = NoFlags; // 标记
     this.subtreeFlags = NoFlags; // 子树中包含的flags
     this.deletions = null;
+
+    this.lanes = NoLanes; // 保存fiberNode中 所有未执行更新对应的lane
+    this.childLanes = NoLanes;  // 保存一个fiberNode子树中 所有未执行更新对应的lane
   }
 
 };
@@ -137,6 +144,9 @@ export const createWorkInProgress = (current: FiberNode, pendingProps: Props): F
   wip.memoizedProps = current.memoizedProps;
   wip.memoizedState = current.memoizedState;
   wip.ref = current.ref;
+
+  wip.lanes = current.lanes;
+  wip.childLanes = current.childLanes;
 
   return wip;
 }

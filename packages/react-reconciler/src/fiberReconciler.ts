@@ -13,7 +13,7 @@ export function createContainer(container: Container) { // 执行ReactDOM.create
   // 新建fiberRootNode和hostRootFiber，并让两者产生关联
   const hostRootFiber = new FiberNode(HostRoot, {}, null);
   const root = new FiberRootNode(container, hostRootFiber);
-
+  console.log('new FiberRootNode');
   hostRootFiber.updateQueue = createUpdateQueue();
   return root;
 }
@@ -27,7 +27,7 @@ export function updateContainer(element: ReactElementType | null, root: FiberRoo
   
     // 首屏渲染触发同步更新
     const update = createUpdate<ReactElementType | null>(element, lane);
-    enqueueUpdate(hostRootFiber.updateQueue as UpdateQueue<ReactElementType | null>, update);
+    enqueueUpdate(hostRootFiber.updateQueue as UpdateQueue<ReactElementType | null>, update, hostRootFiber, lane);
   
     scheduleUpdateOnFiber(hostRootFiber, lane);
   });

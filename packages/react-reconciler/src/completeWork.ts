@@ -6,6 +6,7 @@ import { ContextProvider, Fragment, FunctionComponent, HostComponent, HostRoot, 
 import { NoFlags, Ref, Update, Visibility } from "./fiberFlags";
 import { popProvider } from "./fiberContext";
 import { popSuspenseHandler } from "./suspenseContext";
+import { NoLanes, mergeLanes } from "./fiberLanes";
 
 function markUpdate(fiber: FiberNode) {
   fiber.flags |= Update;
@@ -137,14 +138,19 @@ function appendAllChildren(parent: Container | Instance, wip: FiberNode) {
 function bubbleProperties(wip: FiberNode) {
   let subtreeFlags = NoFlags; // subtreeFlags字段会包含当前节点的子节点的flags以及子节点的subtreeFlags
   let child = wip.child;
+  let newChildLanes = NoLanes;  // newChildLanes是fiber.childLanes，保存一个fiberNode子树中 所有未执行更新对应的lane
 
   while (child !== null) {
     subtreeFlags |= child.subtreeFlags; // 用位运算的按位或的方式，将当前节点的子节点subtreeFlags附加起来
     subtreeFlags |= child.flags;
+
+    // 把child.lanes 和child.childLanes附加在当前wip的childLanes上；当bubbleProperties一层层往上冒泡的时候，这棵子树的子孙节点的lanes就会一层层的冒泡到childLanes上
+    newChildLanes = mergeLanes(newChildLanes, mergeLanes(child.lanes, child.childLanes));
 
     // 遍历child以及它的sibling
     child.return = wip;
     child = child.sibling;
   }
   wip.subtreeFlags |= subtreeFlags;
+  wip.childLanes = newChildLanes;
 }

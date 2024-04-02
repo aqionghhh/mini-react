@@ -327,3 +327,21 @@ function updateFragment(
 
 export const reconcileChildFibers = ChildReconciler(true);  // 追踪副作用
 export const mountChildFibers = ChildReconciler(false);  // 不追踪副作用
+
+// clone wip的child以及child的sibling方法
+export function cloneChildFibers(wip: FiberNode) {
+  // child可能存在sibling
+  if (wip.child === null) {
+    return null;
+  }
+  let currentChild = wip.child;
+  let newChild = createWorkInProgress(currentChild, currentChild.pendingProps);
+  wip.child = newChild;
+  newChild.return = wip;
+
+  while (currentChild.sibling !== null) {
+    currentChild = currentChild.sibling;
+    newChild = newChild.sibling = createWorkInProgress(newChild, newChild.pendingProps);
+    newChild.return = wip;
+  }
+}

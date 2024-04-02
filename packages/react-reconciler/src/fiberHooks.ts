@@ -5,11 +5,12 @@ import ReactCurrentBatchConfig from "react/src/currentBatchConfig";
 import { FiberNode } from "./fiber";
 import { Update, UpdateQueue, createUpdate, createUpdateQueue, enqueueUpdate, processUpdateQueue } from "./updateQueue";
 import { scheduleUpdateOnFiber } from "./workLoop";
-import { Lane, NoLane, requestUpdateLane } from "./fiberLanes";
+import { Lane, NoLane, mergeLanes, removeLanes, requestUpdateLane } from "./fiberLanes";
 import { Flags, PassiveEffect } from "./fiberFlags";
 import { HookHasEffect, Passive } from "./hookEffectTag";
 import { REACT_CONTEXT_TYPE } from "shared/ReactSymbols";
 import { trackUsedThenable } from "./thenable";
+import { markWipReceivedUpdate } from "./beginWork";
 
 let currentlyRenderingFiber: FiberNode | null = null; // 当前正在render的fiber
 let workInProgressHook: Hook | null = null; // 指向当前正在处理的hook（当前正在进入一个FC的beginWork阶段时，会处理当前链表中的每一个hook，需要一个指针来指向正在处理的hook）
@@ -227,11 +228,25 @@ function updateState<State>(): [State, Dispatch<State>] {
   }
 
   if (baseQueue !== null) {
+    const prevState = hook.memoizedState;  // 更新之前的状态
     const { 
       memoizedState, 
       baseQueue: newBaseQueue, 
       baseState: newBaseState 
-    } = processUpdateQueue(baseState, baseQueue, renderLane);
+    } = processUpdateQueue(baseState, baseQueue, renderLane, (update) => {  // 这里的update就是呗跳过的update
+      const skippedLane = update.lane;
+      const fiber = currentlyRenderingFiber as FiberNode;
+
+      // 在beginWork时fiber.lanes已经被重置为NoLanes 
+      fiber.lanes = mergeLanes(fiber.lanes, skippedLane); // 将跳过的lane重新加回lanes中（其实就是该lane没有被消费，一个重置的操作）
+    });
+
+    // 存在update 但计算出的state没变
+    // Object.is 和 === 的区别：一些特殊值的比较上，比如说NaN、+0 -0、
+    if (!Object.is(prevState, memoizedState)) { // 没有命中bailout
+      markWipReceivedUpdate();
+    }
+
     hook.memoizedState = memoizedState;
     hook.baseQueue = newBaseQueue;
     hook.baseState = newBaseState;
@@ -348,7 +363,7 @@ function dispatchSetState<State>(
   const lane = requestUpdateLane();
   // 既然是要触发更新，那就创建一个update
   const update = createUpdate(action, lane);
-  enqueueUpdate(updateQueue, update); // 将update插入到updateQueue中 
+  enqueueUpdate(updateQueue, update, fiber, lane); // 将update插入到updateQueue中 
   scheduleUpdateOnFiber(fiber, lane);  // 从当前触发更新的（也就是FC对应）fiber开始调度更新
 }
 
@@ -404,4 +419,14 @@ export function resetHooksOnUnwind() {
   currentlyRenderingFiber = null;
   currentHook = null;
   workInProgressHook = null;
+}
+
+// 如果本次更新命中了bailout，需要复用之前的返回值，那么对于hooks中的数据，需要进行重置
+export function bailoutHook(wip: FiberNode, renderLane: Lane) {
+  const current = wip.alternate as FiberNode;
+  wip.updateQueue = current.updateQueue;
+  wip.flags &= ~PassiveEffect;  // 移除一些跟useEffect执行相关的操作
+
+  // 当前组件已经bailout，那么代表 当前fiber中虽然存在update（改变state状态），但update经过计算后得出state没有发生变化，所以可以从lanes中将该lane移除掉
+  current.lanes = removeLanes(current.lanes, renderLane);
 }

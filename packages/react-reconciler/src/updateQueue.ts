@@ -1,6 +1,7 @@
 import { Dispatch } from 'react/src/currentDispatcher';
 import { Action } from 'shared/ReactTypes';
-import { Lane, NoLane, isSubsetOfLanes } from './fiberLanes';
+import { Lane, NoLane, isSubsetOfLanes, mergeLanes } from './fiberLanes';
+import { FiberNode } from './fiber';
 
 // 对于React来说，有两种触发更新的方式，比如说：
 // this.setState({xxx: 1})
@@ -45,7 +46,9 @@ export const createUpdateQueue = <State>() => {
 // 往updateQueue里增加update的方法
 export const enqueueUpdate = <State>(
   updateQueue: UpdateQueue<State>,
-  update: Update<State>
+  update: Update<State>,
+  fiber: FiberNode,
+  lane: Lane
 ) => {
   // updateQueue.shared.pending = update; // 原先版本，update直接覆盖
   // 现在改为环状链表的形式
@@ -66,13 +69,21 @@ export const enqueueUpdate = <State>(
   // 第三次：pending = c -> a -> b -> c
   // 即一个环状链表，pending始终指向最后插入的update
   updateQueue.shared.pending = update;
+
+  // 将所有未执行更新对应的lane保存子啊fiberNode.lanes中
+  fiber.lanes = mergeLanes(fiber.lanes, lane);  // fiber.lanes是wip的lanes
+  const alternate = fiber.alternate;
+  if (alternate !== null) { // 消费lanes的时候，其实是在消费wip的lanes；但如果遇到什么问题需要重置的话，需要从current中重置，即current.lanes
+    alternate.lanes = mergeLanes(alternate.lanes, lane);  // alternate.lanes是current.lanes
+  }
 }
 
 // updateQueue消费update的方法
 export const processUpdateQueue = <State>(
   baseState: State, // 初始状态
   pendingUpdate: Update<State> | null, // 要消费的update
-  renderLane: Lane
+  renderLane: Lane,
+  onSkipUpdate?: <State>(update: Update<State>) => void // 当存在update被跳过的情况，会执行这个函数
 ): { 
   memoizedState: State;
   baseState: State;
@@ -103,6 +114,8 @@ export const processUpdateQueue = <State>(
         // 如果本次更新有update被跳过，则本次更新计算出的memoizedState为「考虑优先级」情况下计算的结果，
         // baseState为「最后一个没被跳过的update计算后的结果」，下次更新开始时baseState !== memoizedState
         const clone = createUpdate(pending.action, pending.lane); // 被跳过的update
+        onSkipUpdate?.(clone);
+
         // 判断是否是第一个被跳过的update
         if (newBaseQueueFirst === null) { // 第一个被跳过的
           newBaseQueueFirst = clone;
