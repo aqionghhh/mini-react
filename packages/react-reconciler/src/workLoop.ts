@@ -387,6 +387,9 @@ function commitRoot(root: FiberRootNode) {
   const rootHasEffect = (finishedWork.flags & (MutationMask | PassiveMask)) !== NoFlags; // 按位与
   if (subtreeHasEffect || rootHasEffect) {
     // beforeMutation
+    // beforeMutation主要处理如下两种类型的fiberNode：
+    // 1. ClassComponent，执行getSnapshotBeforeUpdate方法
+    // 2. HostRoot，清空HostRoot挂载的内容，方便Mutation阶段渲染 
     
     // mutation（eg：Placement）
     commitMutationEffect(finishedWork, root);
