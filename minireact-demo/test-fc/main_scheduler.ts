@@ -56,12 +56,18 @@ function schedule() {
     return;
   }
   const { priority: curPriority } = curWork;
-  if (curPriority === prevPriority) {
+  if (curPriority === prevPriority) { // 如果优先级相同，则不需要重新调度，退出调度
     return;
   }
 
+  // 准备调度当前最高优先级的work
+  // 调度之前，如果有工作正在进行，则中断它
+
   // 更高优先级的work
   cbNode && cancelCallback(cbNode); // 取消调度（把当前正在调度的work取消掉）
+  // cancelCallback中会将当前传入的task.callback置为null；
+  // Scheduler内部通过判断task.callback === null是否成立决定是否已出该task，即当task.callback !== null时，task.callback才有机会被执行。
+  // 所以在执行cancelCallback(cbNode)之后，如果Scheduler在下次调度时发现task.callback === null，就会移除该task，task.callback不会再有机会执行
 
   // schedule
   curCallback = scheduleCallback(curPriority, perform.bind(null, curWork));  // scheduleCallback执行 返回当前调度的回调函数
@@ -82,8 +88,8 @@ function perform(work: Work, didTimeout?: boolean) {  // didTimeout标记当前w
   }
   
   // 执行完 或 中断执行
-  prevPriority =work.priority;
-  if (!work.count) {
+  prevPriority = work.priority;
+  if (!work.count) {  // 当前work执行完了
     const workIndex = workList.indexOf(work);
     workList.splice(workIndex, 1); // 移除该work
     prevPriority = IdlePriority;
@@ -91,9 +97,12 @@ function perform(work: Work, didTimeout?: boolean) {  // didTimeout标记当前w
 
   const prevCallback = curCallback;
   schedule();
+  // 调度完后，如果callback发生变化，代表这是新的work
   const newCallback = curCallback;
 
   if (newCallback && prevCallback === newCallback) {  // 如果这两个值一致的话，说明schedule中走到了if语句里，return掉了
+    // callback不变，代表是同一个work，只不过Time Slice时间用尽（5ms）
+    // 返回的函数会被Scheduler继续调用
     return perform.bind(null, work);
   }
 }
