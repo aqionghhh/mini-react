@@ -99,7 +99,7 @@ function getEventCallbackNameFromEventType(eventType: string): string[] | undefi
   }[eventType];
 }
 
-function collectPaths(targetElement: DOMElement, container: Container, eventType: string) {
+function collectPaths(targetElement: DOMElement, container: Container, eventType: string) { // targetElement: 事件源
   const paths: Paths = {
     capture: [],
     bubble: []
@@ -133,7 +133,7 @@ function collectPaths(targetElement: DOMElement, container: Container, eventType
         });
       }
     }
-    targetElement = targetElement.parentNode as DOMElement;
+    targetElement = targetElement.parentNode as DOMElement; // 从事件源开始 向上遍历
   }
   return paths;
 }
